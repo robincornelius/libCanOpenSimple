@@ -1,13 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
-using System.IO.Ports;
 using System.Collections.Concurrent;
-//using NNanomsg;
-//using NNanomsg.Protocols;
-
+using System.Reflection;
 
 namespace libCanopenSimple
 {
@@ -99,54 +94,46 @@ namespace libCanopenSimple
 
     public class libCanopen
     {
-        SerialPort serialPort;
-        //BusSocket s;
-        //NanomsgListener l;
 
-        string buf;
         public debuglevel dbglevel = debuglevel.DEBUG_NONE;
         public bool echo = true;
 
         public bool ipcisopen = false;
 
-        public bool isopen()
-        {
+        DriverLoader loader;
+        
+       
+        DriverInstance driver;
 
-            if (ipcisopen)
-                return true;
+        Dictionary<UInt16, NMTState> nmtstate = new Dictionary<ushort, NMTState>();
 
-            if (serialPort == null)
-                return false;
-
-           return serialPort.IsOpen;
-
-        }
+        private Queue<SDO> sdo_queue = new Queue<SDO>();
 
         public libCanopen()
         {
+
+            loader = new DriverLoader();
+          
             //preallocate all NMT guards
-            for(byte x=0;x<0x80;x++)
+            for (byte x=0;x<0x80;x++)
             {
                 NMTState nmt = new NMTState();
                 nmtstate[x] = nmt;
             }
-  
         }
 
-        Dictionary<UInt16, NMTState> nmtstate = new Dictionary<ushort, NMTState>();
+        #region driverinterface
 
         public void open(int comport, BUSSPEED speed)
         {
-            serialPort = new SerialPort();
 
-            serialPort.PortName = string.Format("COM{0}", comport);
-            serialPort.BaudRate = 115200;
+            driver = loader.loaddriver("can_usb_win32");
+            DriverInstance.struct_s_BOARD brd = new DriverInstance.struct_s_BOARD();
+            brd.busname = string.Format("COM{0}", comport);
+            brd.baudrate = "500K";
+            driver.open(brd);
 
-            serialPort.DataReceived += SerialPort_DataReceived;
-
-            serialPort.Open();
-
-            serialPort.Write(String.Format("C\rS{0}\rO\r", (int)speed));
+            driver.rxmessage += Driver_rxmessage;
 
             threadrun = true;
             Thread thread = new Thread(new ThreadStart(asyncprocess));
@@ -155,149 +142,59 @@ namespace libCanopenSimple
 
         }
 
-        public void open(string ipc)
+        public bool isopen()
         {
-            //serialPort = new SerialPort();
-            //serialPort.PortName = string.Format("COM{0}", comport);
-            //serialPort.BaudRate = 115200;
-            //serialPort.DataReceived += SerialPort_DataReceived;
-            //serialPort.Open();
-            //serialPort.Write(String.Format("C\rS{0}\rO\r", (int)speed));
-
-            //s = new BusSocket();
-            //l = new NanomsgListener();
-
-            //s.Connect(ipc);
-            //l.AddSocket(s);
-            //l.ReceivedMessage += L_ReceivedMessage;
-
-            System.Threading.Thread t = new System.Threading.Thread(ipclistentask);
-            t.Start();
-
-            ipcisopen = true;
-
-            threadrun = true;
-            Thread thread = new Thread(new ThreadStart(asyncprocess));
-            thread.Name = "CAN Open worker";
-            thread.Start();
-
-
+            //FIXME
+            return true;
         }
 
-        void ipclistentask()
+        public void SendPacket(canpacket p)
         {
-            //while (true)
+
+            DriverInstance.Message msg = new DriverInstance.Message();
+            msg.cob_id = p.cob;
+            msg.len = p.len;
+            msg.rtr = 0;
+
+            byte[] temp = new byte[8];
+            Array.Copy(p.data, temp, p.len);
+            msg.data = BitConverter.ToUInt64(temp,0);
+
+            driver.cansend(msg);
+
+            if (echo == true)
             {
-                //l.Listen(new TimeSpan(0));
-                //System.Threading.Thread.Sleep(1);
+                Driver_rxmessage(msg);
             }
+
         }
 
-        /*
-        private void L_ReceivedMessage(int socketID)
+        private void Driver_rxmessage(DriverInstance.Message msg)
         {
-            byte[] payload = s.ReceiveImmediate();
-            if (payload == null)
-                return;
-
             canpacket cp = new canpacket();
-            cp.cob = (ushort)(payload[0] | (payload[1] << 8)); //actually 332 bit
+            cp.cob = msg.cob_id;
+            cp.len = msg.len;
+            cp.data = new byte[cp.len];
 
-            int length = cp.cob & 0xF000;
-
-            length = (length >> 12);
-
-            cp.len = (byte)length;
-
-            cp.cob =(ushort)( cp.cob & 0x0fff);
-            cp.data = new byte[length];
-
-            
-
-            for(int x=0;x<length;x++)
-            {
-                cp.data[x] = payload[x + 5];
-            }
-
+            byte[] temp = BitConverter.GetBytes(msg.data);
+            Array.Copy(temp, cp.data, msg.len);
             packetqueue.Enqueue(cp);
-
-            if (dbglevel == debuglevel.DEBUG_ALL)
-                Console.WriteLine(String.Format("RX packet packet: {0}", cp.ToString()));
-
-           
         }
-        */
 
 
         public void close()
         {
-            threadrun = false;
-            if(serialPort!=null)
-                serialPort.Close();
+            if (driver == null)
+                return;
+
+            driver.close();
         }
 
-        private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
-        {
-
-            string receiveBuffer = serialPort.ReadExisting();
-
-            buf += receiveBuffer;
-
-            int idx = 0;
-
-            int start = 0;
-
-            while (idx != -1)
-            {
-                idx = buf.IndexOf('\r', start);
-                if (idx == -1)
-                    break;
-                string meh = buf.Substring(start, idx - start);
-                processCanRX(meh);
-                start = idx + 1;
-            }
-
-            buf = buf.Substring(start);
-        }
-
-        public static byte[] StringToByteArrayFastest(string hex)
-        {
-            if (hex.Length % 2 == 1)
-                throw new Exception("The binary key cannot have an odd number of digits");
-
-            byte[] arr = new byte[hex.Length >> 1];
-
-            for (int i = 0; i < hex.Length >> 1; ++i)
-            {
-                arr[i] = (byte)((GetHexVal(hex[i << 1]) << 4) + (GetHexVal(hex[(i << 1) + 1])));
-            }
-
-            return arr;
-        }
-
-        public static int GetHexVal(char hex)
-        {
-            int val = (int)hex;
-            //For uppercase A-F letters:
-            //return val - (val < 58 ? 48 : 55);
-            //For lowercase a-f letters:
-            //return val - (val < 58 ? 48 : 87);
-            //Or the two combined, but a bit slower:
-            return val - (val < 58 ? 48 : (val < 97 ? 55 : 87));
-        }
+        #endregion
 
         Dictionary<UInt16, Action<byte[]>> PDOcallbacks = new Dictionary<ushort, Action<byte[]>>();
         public Dictionary<UInt16, SDO> SDOcallbacks = new Dictionary<ushort, SDO>();
         ConcurrentQueue<canpacket> packetqueue = new ConcurrentQueue<canpacket>();
-
-        //public Action<canpacket> loggercallback_SDO = null;
-        //public Action<canpacket> loggercallback_NMTEC = null;
-        //public Action<canpacket> loggercallback_NMT = null;
-        //public Action<canpacket[]> loggercallback_PDO = null;
-        //public Action<canpacket> loggercallback_EMCY = null;
-        //public Action<canpacket> loggercallback_LSS = null;
-        //public Action<canpacket> loggercallback_TIME = null;
-        //public Action<canpacket> loggercallback_SYNC = null;
 
         public delegate void SDOEvent(canpacket p);
         public event SDOEvent sdoevent;
@@ -323,56 +220,12 @@ namespace libCanopenSimple
         public delegate void SYNCEvent(canpacket p);
         public event SYNCEvent syncevent;
 
-
-
-
-
-
-
-
         bool threadrun = true;
 
         public void registerPDOhandler(UInt16 cob, Action<byte[]> handler)
         {
             PDOcallbacks[cob] = handler;
         }
-
-        private void processCanRX(string packet,bool loopback=false)
-        {
-            //packet must be at least "700 0" as a min
-
-            if (packet.Length < 4)
-                return;
-
-            if (packet[0] == 't')
-                packet = packet.TrimStart('t');
-            else
-                return;
-
-            byte[] bytes = StringToByteArrayFastest(packet);
-            byte[] cobbytes = new byte[2];
-            cobbytes[1] = bytes[0];
-            cobbytes[0] = (byte)((0xF0 & bytes[1]));
-
-            UInt16 cob = (UInt16)(BitConverter.ToUInt16(cobbytes, 0)>>4); //0,1
-            byte len = (byte)(0x0F&bytes[1]);
-
-
-            canpacket cp = new canpacket();
-            cp.cob = cob;
-            cp.len = len;
-            cp.data = new byte[len];
-            for (int x = 0; x < len; x++)
-                cp.data[x] = bytes[2 + x];
-
-            packetqueue.Enqueue(cp);
-
-            if(dbglevel==debuglevel.DEBUG_ALL)
-                Console.WriteLine(String.Format("RX packet packet: {0}", cp.ToString()));
-
-        }
-
-        
 
         void asyncprocess()
         {
@@ -382,8 +235,6 @@ namespace libCanopenSimple
                 List<canpacket> pdos = new List<canpacket>();
                 while (packetqueue.TryDequeue(out cp))
                 {
-                    //Handle PDO first
-
                     //PDO 0x180 -- 0x57F
                     if (cp.cob >= 0x180 && cp.cob <= 0x57F)
                     {
@@ -392,9 +243,6 @@ namespace libCanopenSimple
                             PDOcallbacks[cp.cob](cp.data);
 
                         pdos.Add(cp);
-
-                        //if (loggercallback_PDO != null)
-                        //    loggercallback_PDO(cp);
                     }
 
                     //SDO replies 0x601-0x67F
@@ -411,7 +259,6 @@ namespace libCanopenSimple
                             }
                         }
 
-
                         if (sdoevent != null)
                             sdoevent(cp);
                     }
@@ -420,15 +267,12 @@ namespace libCanopenSimple
                     {
                         if (sdoevent != null)
                             sdoevent(cp);
-
                     }
 
                     //NMT
                     if (cp.cob > 0x700 && cp.cob <= 0x77f)
                     {
                         byte node = (byte)(cp.cob & 0x07F);
-
-                        //Console.WriteLine(string.Format("NMT node {0:x} state {1}",cp.cob,cp.data[0]));
 
                         nmtstate[node].changestate((NMTState.e_NMTState)cp.data[0]);
                         nmtstate[node].lastping = DateTime.Now;
@@ -442,23 +286,19 @@ namespace libCanopenSimple
 
                         if (nmtevent != null)
                             nmtevent(cp);
-
                     }
                     if (cp.cob == 0x80)
                     {
                         if (syncevent != null)
                             syncevent(cp);
-
                     }
 
                     if (cp.cob > 0x080 && cp.cob <= 0xFF)
                     {
-
                         if(emcyevent!=null)
                         {
                             emcyevent(cp);
                         }
-
                     }
 
                     if (cp.cob == 0x100)
@@ -469,12 +309,9 @@ namespace libCanopenSimple
 
                     if (cp.cob > 0x7E4 && cp.cob <= 0x7E5)
                     {
-
                         if (lssevent != null)
                             lssevent(cp);
-
                     }
-
                 }
 
                 if(pdos.Count>0)
@@ -499,24 +336,12 @@ namespace libCanopenSimple
                             }
                         }
                     }
-                     
-
                    // System.Threading.Thread.Sleep(1);
             }
-
         }
 
-        public bool checkguard(int node, TimeSpan maxspan)
-        {
 
-            if (DateTime.Now - nmtstate[(ushort)node].lastping > maxspan)
-                return false;
-
-            return true;
-
-        }
-
-        private Queue<SDO> sdo_queue = new Queue<SDO>();
+        #region SDOHelpers
 
         public SDO SDOwrite(byte node, UInt16 index, byte subindex, UInt32 udata, Action<SDO> completedcallback)
         {
@@ -548,7 +373,6 @@ namespace libCanopenSimple
             return SDOwrite(node, index, subindex, bytes, completedcallback);
         }
 
-
         public SDO SDOwrite(byte node, UInt16 index, byte subindex, byte udata, Action<SDO> completedcallback)
         {
             byte[] bytes = new byte[1];
@@ -563,7 +387,6 @@ namespace libCanopenSimple
             return SDOwrite(node, index, subindex, bytes, completedcallback);
         }
 
-
         public SDO SDOwrite(byte node, UInt16 index, byte subindex, byte[] data, Action<SDO> completedcallback)
         {
 
@@ -572,7 +395,6 @@ namespace libCanopenSimple
             return sdo;
         }
 
-     
         public SDO SDOread(byte node, UInt16 index, byte subindex,Action<SDO> completedcallback)
         {
             SDO sdo = new SDO(this, node, index, subindex, SDO.direction.SDO_READ, completedcallback,null);
@@ -580,47 +402,9 @@ namespace libCanopenSimple
             return sdo;
         }
 
+        #endregion
 
-        public void SendPacket(canpacket p)
-        {
-
-            string canframe = string.Format("t{0:x3}{1:x1}", p.cob, p.len);
-
-            for (int x = 0; x < p.len; x++)
-            {
-                canframe += string.Format("{0:x2}", p.data[x]);
-            }
-
-            canframe += "\r";
-
-            if (serialPort != null && serialPort.IsOpen)
-            {
-                serialPort.Write(canframe);
-            }
-
-           /* if(ipcisopen)
-            {
-                byte[] payload = new byte[15];
-
-                payload[0] = (byte)p.cob;
-                payload[1] = (byte)(p.cob >> 8);
-               // payload[1] |= (byte) (p.len << 4);
-
-                payload[4] = p.len;
-
-                for(int x=0;x<p.len;x++)
-                {
-                    payload[5 + x] = p.data[x];
-                }
-
-                s.Send(payload);
-            }*/
-
-            if(echo==true)
-            {
-                processCanRX(canframe.Substring(0,canframe.Length-1));
-            }
-        }
+        #region NMTHelpers
 
         public void NMT_start(byte nodeid = 0)
         {
@@ -701,6 +485,18 @@ namespace libCanopenSimple
             SendPacket(p);
         }
 
+        public bool checkguard(int node, TimeSpan maxspan)
+        {
+            if (DateTime.Now - nmtstate[(ushort)node].lastping > maxspan)
+                return false;
+
+            return true;
+        }
+
+        #endregion
+
+        #region PDOhelpers
+
         public void writePDO(UInt16 cob,byte[] payload)
         {
             canpacket p = new canpacket();
@@ -710,10 +506,10 @@ namespace libCanopenSimple
             for (int x = 0; x < payload.Length; x++)
                 p.data[x] = payload[x];
 
-
-  
             SendPacket(p);
         }
+
+        #endregion
 
     }
 }

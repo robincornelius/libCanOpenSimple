@@ -3,7 +3,55 @@ using System.Runtime.InteropServices;
 
 namespace libCanopenSimple
 {
+    /// <summary> DriverLoader - dynamic pinvoke can festival drivers
+    /// This class will select the approprate win or mono loader and try to load the requested 
+    /// can festival library
+    /// Info on pinvoke for win/mono :-
+    /// http://stackoverflow.com/questions/13461989/p-invoke-to-dynamically-loaded-library-on-mono
+    /// by gordonmleigh
+    /// </summary>
+
     public class DriverLoader
+    {
+        DriverInstance driver;
+
+        public static bool IsRunningOnMono()
+        {
+            return Type.GetType("Mono.Runtime") != null;
+        }
+
+        /// <summary>
+        /// Attempt to load the requested can festival driver and return a DriverInstance class
+        /// </summary>
+        /// <param name="fileName"> Name of the dynamic library to load, note do not append .dll or .so</param>
+        /// <returns></returns>
+        public DriverInstance loaddriver(string fileName)
+        {
+            if(IsRunningOnMono())
+            {
+                fileName += ".so";
+                DriverLoaderMono dl = new DriverLoaderMono();
+                return dl.loaddriver(fileName);
+            }
+            else
+            {
+                fileName += ".dll";
+                DriverLoaderWin dl = new DriverLoaderWin();
+                return dl.loaddriver(fileName);
+            }
+
+        }
+    }
+
+    #region windows
+
+    /// <summary>
+    /// CanFestival driver loader for windows, this class will load kernel32 then attept to use LoadLibrary()
+    /// and GetProcAddress() to hook the can festival driver functions these are then exposed as delagates
+    /// for eash C# access
+    /// </summary>
+
+    public class DriverLoaderWin
     {
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern IntPtr LoadLibrary(string libname);
@@ -18,6 +66,11 @@ namespace libCanopenSimple
 
         DriverInstance driver;
 
+        /// <summary>
+        /// Attempt to load the requested can festival driver and return a DriverInstance class
+        /// </summary>
+        /// <param name="fileName">Load can festival driver (Windows .Net runtime version) .dll must be appeneded in this case to fileName</param>
+        /// <returns></returns>
         public DriverInstance loaddriver(string fileName)
         {
 
@@ -50,6 +103,72 @@ namespace libCanopenSimple
             return driver;
         }
     }
+    #endregion
+
+    #region mono
+
+    /// <summary>
+    /// CanFestival driver loader for mono, this class will load libdl then attept to use dlopen() and dlsym()
+    /// and GetProcAddress to hook the can festival driver functions these are then exposed as delagates
+    /// for eash C# access
+    /// </summary>
+    /// 
+    public class DriverLoaderMono
+    {
+
+        [DllImport("libdl.so")]
+        protected static extern IntPtr dlopen(string filename, int flags);
+
+        [DllImport("libdl.so")]
+        protected static extern IntPtr dlsym(IntPtr handle, string symbol);
+
+        DriverInstance driver;
+
+        const int RTLD_NOW = 2; // for dlopen's flags 
+
+        /// <summary>
+        /// Attempt to load the requested can festival driver and return a DriverInstance class
+        /// </summary>
+        /// <param name="fileName">Load can festival driver (Mono runtime version) .so must be appeneded in this case to fileName</param>
+        /// <returns></returns>
+        public DriverInstance loaddriver(string fileName)
+        {
+            IntPtr Handle = dlopen(fileName, RTLD_NOW);
+            if (Handle == IntPtr.Zero)
+            {
+                int errorCode = Marshal.GetLastWin32Error();
+                throw new Exception(string.Format("Failed to load library (ErrorCode: {0})", errorCode));
+            }
+
+            IntPtr funcaddr;
+
+            funcaddr = dlsym(Handle, "canReceive_driver");
+            DriverInstance.canReceive_T canReceive = Marshal.GetDelegateForFunctionPointer(funcaddr, typeof(DriverInstance.canReceive_T)) as DriverInstance.canReceive_T;
+
+            funcaddr = dlsym(Handle, "canSend_driver");
+            DriverInstance.canSend_T canSend = Marshal.GetDelegateForFunctionPointer(funcaddr, typeof(DriverInstance.canSend_T)) as DriverInstance.canSend_T; ;
+
+            funcaddr = dlsym(Handle, "canOpen_driver");
+            DriverInstance.canOpen_T canOpen = Marshal.GetDelegateForFunctionPointer(funcaddr, typeof(DriverInstance.canOpen_T)) as DriverInstance.canOpen_T; ;
+
+            funcaddr = dlsym(Handle, "canClose_driver");
+            DriverInstance.canClose_T canClose = Marshal.GetDelegateForFunctionPointer(funcaddr, typeof(DriverInstance.canClose_T)) as DriverInstance.canClose_T; ;
+
+            funcaddr = dlsym(Handle, "canChangeBaudRate_driver");
+            DriverInstance.canChangeBaudRate_T canChangeBaudRate = Marshal.GetDelegateForFunctionPointer(funcaddr, typeof(DriverInstance.canChangeBaudRate_T)) as DriverInstance.canChangeBaudRate_T; ;
+
+            driver = new DriverInstance(canReceive, canSend, canOpen, canClose, canChangeBaudRate);
+
+            return driver;
+        }
+    }
+
+    #endregion
+
+    /// <summary>
+    /// DriverInstace represents a specific instance of a loaded canfestival driver
+    /// </summary>
+    /// 
 
     public class DriverInstance
     {
@@ -57,10 +176,18 @@ namespace libCanopenSimple
         private bool threadrun = true;
         System.Threading.Thread rxthread;
 
+        /// <summary>
+        /// CANOpen message recieved callback, this will be fired upon any recieved complete message on the bus
+        /// </summary>
+        /// <param name="msg">The CanOpen message</param>
         public delegate void RxMessage(Message msg);
         public event RxMessage rxmessage;
 
-        [StructLayout(LayoutKind.Sequential)]
+        /// <summary>
+        /// CanFestival message packet. Note we set data to be a UInt64 as inside canfestival its a fixed char[8] array
+        /// we cannout use fixed arrays in C# without UNSAFE so instead we just use a UInt64
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential,Size=12,Pack=1)]
         public struct Message
         {
             public UInt16 cob_id; /**< message's ID */
@@ -69,9 +196,13 @@ namespace libCanopenSimple
             public UInt64 data;
         }
 
+        /// <summary>
+        /// This contains the bus name on which the can board is connected and the bit rate of the board
+        /// </summary>
         [StructLayout(LayoutKind.Sequential)]
         public struct struct_s_BOARD
         {
+
             [MarshalAs(UnmanagedType.LPStr)]
             public String busname;  /**< The bus name on which the CAN board is connected */
 
@@ -79,7 +210,16 @@ namespace libCanopenSimple
             public String baudrate; /**< The board baudrate */
         };
 
-
+        /// <summary>
+        /// Create a new DriverInstance, this class provides a wrapper between the C# world and the C API dlls from canfestival that
+        /// provide access to the CAN hardware devices. The exposed delegates represent the 5 defined entry points that all can festival
+        /// drivers expose to form the common driver interface API. Usualy the DriverLoader class will directly call this constructor.
+        /// </summary>
+        /// <param name="canReceive">pInvoked delegate for canReceive function</param>
+        /// <param name="canSend">pInvoked delegate for canSend function</param>
+        /// <param name="canOpen">pInvoked delegate for canOpen function</param>
+        /// <param name="canClose">pInvoked delegate for canClose function</param>
+        /// <param name="canChangeBaudrate">pInvoked delegate for canChangeBaudrate functipn</param>
         public DriverInstance(canReceive_T canReceive,canSend_T canSend,canOpen_T canOpen,canClose_T canClose, canChangeBaudRate_T canChangeBaudrate)
         {
             this.canReceive = canReceive;
@@ -107,28 +247,52 @@ namespace libCanopenSimple
 
         private IntPtr handle;
 
+        IntPtr brdptr;
+
+        /// <summary>
+        /// Open the CAN device
+        /// </summary>
+        /// <param name="brd">The requested CAN bit rate and the requested bus ID are provided here.</param>
         public void open(struct_s_BOARD brd)
         {
            
-            IntPtr ptr = Marshal.AllocHGlobal(Marshal.SizeOf(brd));
-            Marshal.StructureToPtr(brd, ptr, false);
+            brdptr = Marshal.AllocHGlobal(Marshal.SizeOf(brd));
+            Marshal.StructureToPtr(brd, brdptr, false);
 
-            handle = canOpen(ptr);
+            handle = canOpen(brdptr);
 
             rxthread = new System.Threading.Thread(rxthreadworker);
             rxthread.Start();
-
-
         }
 
+        /// <summary>
+        /// Close the CAN hardware device
+        /// </summary>
+        public void close()
+        {
+            threadrun = false;
+
+            if(handle!=IntPtr.Zero)
+                canClose(handle);
+
+            if(brdptr!=IntPtr.Zero)
+                Marshal.FreeHGlobal(brdptr);
+        }
+
+        /// <summary>
+        /// Message pump function. This should be called in a fast loop
+        /// </summary>
+        /// <returns></returns>
         public Message canreceive()
         {
+
+            // I think we can do better here and not allocated/deallocate to heap every pump loop
             Message msg = new Message();
 
             IntPtr msgptr = Marshal.AllocHGlobal(Marshal.SizeOf(msg));
             Marshal.StructureToPtr(msg, msgptr, false);
 
-            canReceive(handle, msgptr);
+            byte status = canReceive(handle, msgptr);
 
             msg = (Message) Marshal.PtrToStructure(msgptr, typeof(Message));
 
@@ -138,6 +302,10 @@ namespace libCanopenSimple
 
         }
 
+        /// <summary>
+        /// Send a CanOpen mesasge to the hardware device
+        /// </summary>
+        /// <param name="msg">CanOpen message to be sent</param>
         public void cansend(Message msg)
         {
             
@@ -150,6 +318,9 @@ namespace libCanopenSimple
 
         }
 
+        /// <summary>
+        /// Private worker thread to keep the rxmessage() function pumped
+        /// </summary>
         private void rxthreadworker()
         {
             while(threadrun)
