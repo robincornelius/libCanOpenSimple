@@ -47,12 +47,6 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SDO.cs" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\CanMonitor\Settings\Settings.csproj">
-      <Project>{d77e70e0-5808-4f97-a2a1-fc23d03aef6a}</Project>
-      <Name>Settings</Name>
-    </ProjectReference>
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
