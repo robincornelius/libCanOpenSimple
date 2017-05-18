@@ -1,4 +1,5 @@
 ﻿/// Can Festival driver loader for C#
+/// libCanopenSimple
 /// Robin Cornelius <robin.cornelius@gmail.com>
 
 using System;
@@ -16,8 +17,6 @@ namespace libCanopenSimple
 
     public class DriverLoader
     {
-        DriverInstance driver;
-
         public static bool IsRunningOnMono()
         {
             return Type.GetType("Mono.Runtime") != null;
@@ -30,7 +29,7 @@ namespace libCanopenSimple
         /// <returns></returns>
         public DriverInstance loaddriver(string fileName)
         {
-            if(IsRunningOnMono())
+            if (IsRunningOnMono())
             {
                 fileName += ".so";
                 DriverLoaderMono dl = new DriverLoaderMono();
@@ -74,7 +73,7 @@ namespace libCanopenSimple
         /// </summary>
         ~DriverLoaderWin()
         {
-            if(Handle != IntPtr.Zero)
+            if (Handle != IntPtr.Zero)
             {
                 FreeLibrary(Handle);
                 Handle = IntPtr.Zero;
@@ -203,7 +202,7 @@ namespace libCanopenSimple
         /// CanFestival message packet. Note we set data to be a UInt64 as inside canfestival its a fixed char[8] array
         /// we cannout use fixed arrays in C# without UNSAFE so instead we just use a UInt64
         /// </summary>
-        [StructLayout(LayoutKind.Sequential,Size=12,Pack=1)]
+        [StructLayout(LayoutKind.Sequential, Size = 12, Pack = 1)]
         public struct Message
         {
             public UInt16 cob_id; /**< message's ID */
@@ -332,7 +331,7 @@ namespace libCanopenSimple
                     return false;
                 }
             }
-            catch(Exception)
+            catch (Exception)
             {
                 return false;
             }
@@ -358,12 +357,12 @@ namespace libCanopenSimple
         {
             threadrun = false;
 
-            if(handle!=IntPtr.Zero)
+            if (handle != IntPtr.Zero)
                 canClose(handle);
 
             handle = IntPtr.Zero;
 
-            if(brdptr!=IntPtr.Zero)
+            if (brdptr != IntPtr.Zero)
                 Marshal.FreeHGlobal(brdptr);
 
             brdptr = IntPtr.Zero;
@@ -384,7 +383,7 @@ namespace libCanopenSimple
 
             byte status = canReceive(handle, msgptr);
 
-            msg = (Message) Marshal.PtrToStructure(msgptr, typeof(Message));
+            msg = (Message)Marshal.PtrToStructure(msgptr, typeof(Message));
 
             Marshal.FreeHGlobal(msgptr);
 
@@ -398,7 +397,7 @@ namespace libCanopenSimple
         /// <param name="msg">CanOpen message to be sent</param>
         public void cansend(Message msg)
         {
-            
+
             IntPtr msgptr = Marshal.AllocHGlobal(Marshal.SizeOf(msg));
             Marshal.StructureToPtr(msg, msgptr, false);
 
@@ -413,7 +412,7 @@ namespace libCanopenSimple
         /// </summary>
         private void rxthreadworker()
         {
-            while(threadrun)
+            while (threadrun)
             {
 
                 DriverInstance.Message rxmsg = canreceive();

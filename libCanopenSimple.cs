@@ -79,7 +79,7 @@ namespace libCanopenSimple
         {
             string output = string.Format("{0:x3} {1:x1}", cob, len);
 
-            for(int x=0;x<len;x++)
+            for (int x = 0; x < len; x++)
             {
                 output += string.Format(" {0:x2}", data[x]);
             }
@@ -87,7 +87,7 @@ namespace libCanopenSimple
         }
     }
 
-   
+
     /// <summary>
     /// A simple can open class providing callbacks for each of the message classes and allowing one to send messages to the bus
     /// Also supports some NMT helper functions and can act as a SDO Client
@@ -111,7 +111,7 @@ namespace libCanopenSimple
         public libCanopenSimple()
         {
             //preallocate all NMT guards
-            for (byte x=0;x<0x80;x++)
+            for (byte x = 0; x < 0x80; x++)
             {
                 NMTState nmt = new NMTState();
                 nmtstate[x] = nmt;
@@ -127,7 +127,7 @@ namespace libCanopenSimple
         /// <param name="comport">COM PORT number</param>
         /// <param name="speed">CAN Bit rate</param>
         /// <param name="drivername">Driver to use</param>
-        public void open(int comport, BUSSPEED speed,string drivername)
+        public void open(int comport, BUSSPEED speed, string drivername)
         {
 
             driver = loader.loaddriver(drivername);
@@ -293,7 +293,7 @@ namespace libCanopenSimple
                             nmtecevent(cp);
                     }
 
-                    if(cp.cob==000)
+                    if (cp.cob == 000)
                     {
 
                         if (nmtevent != null)
@@ -307,7 +307,7 @@ namespace libCanopenSimple
 
                     if (cp.cob > 0x080 && cp.cob <= 0xFF)
                     {
-                        if(emcyevent!=null)
+                        if (emcyevent != null)
                         {
                             emcyevent(cp);
                         }
@@ -326,29 +326,29 @@ namespace libCanopenSimple
                     }
                 }
 
-                if(pdos.Count>0)
+                if (pdos.Count > 0)
                 {
                     if (pdoevent != null)
                         pdoevent(pdos.ToArray());
                 }
 
-                    SDO.kick_SDO();
+                SDO.kick_SDO();
 
-                    if (sdo_queue.Count > 0)
+                if (sdo_queue.Count > 0)
+                {
+                    SDO front = sdo_queue.Peek();
+                    if (front != null)
                     {
-                        SDO front = sdo_queue.Peek();
-                        if (front != null)
+                        if (!SDOcallbacks.ContainsKey((UInt16)(front.node + 0x580)))
                         {
-                            if (!SDOcallbacks.ContainsKey((UInt16)(front.node + 0x580)))
-                            {
-                                front = sdo_queue.Dequeue();
-                                //Listen for the reply on 0x580+node id
-                                SDOcallbacks.Add((UInt16)(front.node + 0x580), front);
-                                front.sendSDO();
-                            }
+                            front = sdo_queue.Dequeue();
+                            //Listen for the reply on 0x580+node id
+                            SDOcallbacks.Add((UInt16)(front.node + 0x580), front);
+                            front.sendSDO();
                         }
                     }
-                   // System.Threading.Thread.Sleep(1);
+                }
+                // System.Threading.Thread.Sleep(1);
             }
         }
 
@@ -487,9 +487,9 @@ namespace libCanopenSimple
         /// <param name="subindex">Object Dictionary sub index</param>
         /// <param name="completedcallback">Call back on finished/error event</param>
         /// <returns>SDO class that is used to perform the packet handshake, contains returned data and error/status codes</returns>
-        public SDO SDOread(byte node, UInt16 index, byte subindex,Action<SDO> completedcallback)
+        public SDO SDOread(byte node, UInt16 index, byte subindex, Action<SDO> completedcallback)
         {
-            SDO sdo = new SDO(this, node, index, subindex, SDO.direction.SDO_READ, completedcallback,null);
+            SDO sdo = new SDO(this, node, index, subindex, SDO.direction.SDO_READ, completedcallback, null);
             sdo_queue.Enqueue(sdo);
             return sdo;
         }
@@ -555,7 +555,7 @@ namespace libCanopenSimple
             SendPacket(p);
         }
 
-        public void NMT_SetStateTransitionCallback(byte node,Action<NMTState.e_NMTState> callback)
+        public void NMT_SetStateTransitionCallback(byte node, Action<NMTState.e_NMTState> callback)
         {
             nmtstate[node].NMT_boot = callback;
         }
@@ -589,11 +589,11 @@ namespace libCanopenSimple
 
         #region PDOhelpers
 
-        public void writePDO(UInt16 cob,byte[] payload)
+        public void writePDO(UInt16 cob, byte[] payload)
         {
             canpacket p = new canpacket();
             p.cob = cob;
-            p.len = (byte) payload.Length;
+            p.len = (byte)payload.Length;
             p.data = new byte[p.len];
             for (int x = 0; x < payload.Length; x++)
                 p.data[x] = payload[x];

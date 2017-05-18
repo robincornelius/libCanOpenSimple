@@ -1,46 +1,30 @@
-﻿using System;
+﻿/// libCanopenSimple
+/// Robin Cornelius <robin.cornelius@gmail.com>
+
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Threading;
-using System.Collections.Concurrent;
 
 namespace libCanopenSimple
 {
-    public class SDO 
+    /// <summary>
+    /// The SDO class encapusulates an SDO transfer and its associated data
+    /// </summary>
+    public class SDO
     {
-        public UInt32 expitideddata;
-        UInt32 totaldata;
-        libCanopenSimple can;
 
-        public UInt16 index;
-        public byte subindex;
-        public byte node;
-
-        bool lasttoggle = false;
-
-        DateTime timeout;
-      
-
-        ManualResetEvent finishedevent;
-
+        /// <summary>
+        /// Direction of the SDO transfer
+        /// </summary>
         public enum direction
         {
             SDO_READ = 0,
             SDO_WRITE = 1,
         }
 
-        public direction dir;
-        public bool exp = true;
-        public Action<SDO> completedcallback;
-
-        static List<SDO> activeSDO = new List<SDO>();
-
-        public byte[] databuffer = null;
-
-        debuglevel dbglevel;
-
+        /// <summary>
+        /// Possible SDO states used by simple handshake statemachine
+        /// </summary>
         public enum SDO_STATE
         {
             SDO_INIT,
@@ -50,8 +34,39 @@ namespace libCanopenSimple
             SDO_ERROR,
         }
 
-        public SDO_STATE state;
+        /// <summary>
+        /// Expitided data buffer, if transfer is 4 bytes or less, its here
+        /// </summary>
 
+        public readonly byte node;
+
+        static List<SDO> activeSDO = new List<SDO>();
+
+        private Action<SDO> completedcallback;
+        private byte[] databuffer = null;
+        private SDO_STATE state;
+        private direction dir;
+        private UInt16 index;
+        private byte subindex;
+        private UInt32 expitideddata;
+        private UInt32 totaldata;
+        private libCanopenSimple can;
+        private bool lasttoggle = false;
+        private DateTime timeout;
+        private ManualResetEvent finishedevent;
+        private debuglevel dbglevel;
+
+
+        /// <summary>
+        /// Construct a new SDO object
+        /// </summary>
+        /// <param name="can">a libCanopenSimple object that will give access to the hardware</param>
+        /// <param name="node">The note to talk to (UInt16)</param>
+        /// <param name="index">The index in the object dictionary to access</param>
+        /// <param name="subindex">The subindex in the object dictionary to access</param>
+        /// <param name="dir">Direction of transfer</param>
+        /// <param name="completedcallback">Optional, completed callback (or null if not required)</param>
+        /// <param name="databuffer">A byte array of data to be transfered to or from if more than 4 bytes</param>
         public SDO(libCanopenSimple can, byte node, UInt16 index, byte subindex, direction dir, Action<SDO> completedcallback, byte[] databuffer)
         {
             this.can = can;
@@ -63,27 +78,33 @@ namespace libCanopenSimple
             this.databuffer = databuffer;
 
             finishedevent = new ManualResetEvent(false);
-
             state = SDO_STATE.SDO_INIT;
-
-           // timeout = DateTime.Now + new TimeSpan(0, 0, 5);
             dbglevel = can.dbglevel;
 
         }
 
+        /// <summary>
+        /// Add this SDO object to the active list
+        /// </summary>
         public void sendSDO()
         {
             lock (activeSDO)
                 activeSDO.Add(this);
         }
 
+        /// <summary>
+        /// Has the SDO transfer finished?
+        /// </summary>
+        /// <returns>True if the SDO has finished and fired its finished event</returns>
         public bool WaitOne()
         {
             return finishedevent.WaitOne();
         }
 
-  
-        //async regular poking of the SDO system
+
+        /// <summary>
+        /// SDO pump, call this often
+        /// </summary>
         public static void kick_SDO()
         {
             List<SDO> tokill = new List<SDO>();
@@ -108,7 +129,10 @@ namespace libCanopenSimple
             }
         }
 
-        public void kick_SDOp()
+        /// <summary>
+        /// State machine for a specific SDO instance
+        /// </summary>
+        private void kick_SDOp()
         {
 
             if (state != SDO_STATE.SDO_INIT && DateTime.Now > timeout)
@@ -135,8 +159,6 @@ namespace libCanopenSimple
                     sendpacket(cmd, payload);
                 }
 
-
-
                 if (dir == direction.SDO_WRITE)
                 {
                     bool wpsent = false;
@@ -161,10 +183,10 @@ namespace libCanopenSimple
                             cmd = 0x21;
 
                             byte[] payload = new byte[4];
-                            payload[0] = (byte) databuffer.Length;
-                            payload[1] = (byte) (databuffer.Length >> 8);
-                            payload[2] = (byte) (databuffer.Length >> 16);
-                            payload[3] = (byte) (databuffer.Length >> 24);
+                            payload[0] = (byte)databuffer.Length;
+                            payload[1] = (byte)(databuffer.Length >> 8);
+                            payload[2] = (byte)(databuffer.Length >> 16);
+                            payload[3] = (byte)(databuffer.Length >> 24);
 
                             expitideddata = (UInt32)databuffer.Length;
                             totaldata = 0;
@@ -175,14 +197,19 @@ namespace libCanopenSimple
 
                     }
 
-                  if(wpsent==false)
-                    sendpacket(cmd, databuffer);
+                    if (wpsent == false)
+                        sendpacket(cmd, databuffer);
 
                 }
             }
         }
 
-        public void sendpacket(byte cmd, byte[] payload)
+        /// <summary>
+        /// Send a SDO packet, with command and payload, should be only called from SDO state machine
+        /// </summary>
+        /// <param name="cmd">SDO command byte</param>
+        /// <param name="payload">Data payload to send</param>
+        private void sendpacket(byte cmd, byte[] payload)
         {
 
             canpacket p = new canpacket();
@@ -199,9 +226,9 @@ namespace libCanopenSimple
             if (payload.Length < 4)
                 sendlength = payload.Length;
 
-            for (int x = 0; x < sendlength;x++)
+            for (int x = 0; x < sendlength; x++)
             {
-                p.data[4+x] = payload[x];
+                p.data[4 + x] = payload[x];
             }
 
             if (dbglevel == debuglevel.DEBUG_ALL)
@@ -210,14 +237,19 @@ namespace libCanopenSimple
             can.SendPacket(p);
         }
 
-        public void sendpacketsegment(byte cmd, byte[] payload)
+        /// <summary>
+        /// Segmented transfer update function, should be only called from SDO state machine
+        /// </summary>
+        /// <param name="cmd">SDO command byte</param>
+        /// <param name="payload">Data payload</param>
+        private void sendpacketsegment(byte cmd, byte[] payload)
         {
             canpacket p = new canpacket();
             p.cob = (UInt16)(0x600 + node);
             p.len = 8;
             p.data = new byte[8];
             p.data[0] = cmd;
-           
+
             for (int x = 0; x < payload.Length; x++)
             {
                 p.data[1 + x] = payload[x];
@@ -229,12 +261,20 @@ namespace libCanopenSimple
             can.SendPacket(p);
         }
 
+        /// <summary>
+        /// Force finish the SDO and trigger its finished event
+        /// </summary>
         public void SDOFinish()
         {
             can.SDOcallbacks.Remove((UInt16)(this.node + 0x580));
             finishedevent.Set();
         }
 
+        /// <summary>
+        /// SDO Instance processor, process current SDO reply and decide what to do next
+        /// </summary>
+        /// <param name="cp">SDO Canpacket to process</param>
+        /// <returns></returns>
         public bool SDOProcess(canpacket cp)
         {
 
@@ -249,12 +289,9 @@ namespace libCanopenSimple
 
             int c = 0x01 & cp.data[0]; //More segments to upload?
 
-            //Console.WriteLine(string.Format("SCS {0}", SCS));
-
             //ERROR abort
             if (SCS == 0x04)
             {
-                exp = true;
 
                 expitideddata = (UInt32)(cp.data[4] + (cp.data[5] << 8) + (cp.data[6] << 16) + (cp.data[7] << 24));
                 databuffer = BitConverter.GetBytes(expitideddata);
@@ -262,7 +299,7 @@ namespace libCanopenSimple
                 state = SDO_STATE.SDO_ERROR;
 
                 Console.WriteLine("SDO Error on {0:x4}/{1:x2} {2:x8}", this.index, this.subindex, expitideddata);
-                
+
                 if (completedcallback != null)
                     completedcallback(this);
 
@@ -282,13 +319,9 @@ namespace libCanopenSimple
 
                 foreach (SDO sdo in activeSDO)
                 {
-                    if(sdo.node==node)
+                    if (sdo.node == node)
                     {
-
-                        //if(c!=0 && (index==sdo.index && sub == sdo.subindex)) //if segments break its here
-
-                        //There is no c paramater on download reply?
-                        if((index==sdo.index && sub == sdo.subindex)) //if segments break its here
+                        if ((index == sdo.index && sub == sdo.subindex)) //if segments break its here
                         {
                             state = SDO_STATE.SDO_HANDSHAKE;
                             requestNextSegment(false);
@@ -297,7 +330,6 @@ namespace libCanopenSimple
 
                     }
                 }
-
 
                 state = SDO_STATE.SDO_FINISHED;
 
@@ -314,8 +346,6 @@ namespace libCanopenSimple
                 {
                     lasttoggle = !lasttoggle;
                     requestNextSegment(lasttoggle);
-
-                    //totaldata += 7;
                 }
                 else
                 {
@@ -330,11 +360,10 @@ namespace libCanopenSimple
             if (SCS == 0x02 && e == 1)
             {
                 //Expidited and length are set so its a regular short transfer
-                exp = true;
 
                 expitideddata = (UInt32)(cp.data[4] + (cp.data[5] << 8) + (cp.data[6] << 16) + (cp.data[7] << 24));
                 databuffer = BitConverter.GetBytes(expitideddata);
-              
+
                 state = SDO_STATE.SDO_FINISHED;
 
                 if (completedcallback != null)
@@ -342,9 +371,6 @@ namespace libCanopenSimple
 
                 return true;
             }
-
-
-            exp = false;
 
             if (SCS == 0x02)
             {
@@ -362,10 +388,7 @@ namespace libCanopenSimple
             }
 
             //segmented transfer
-
             UInt32 scount = (UInt32)(7 - sn);
-
-           
 
             //Segments toggle on
             if (SCS == 0x00)
@@ -381,9 +404,7 @@ namespace libCanopenSimple
 
                 totaldata += 7;
 
-                //totaldata += scount;
-
-                if ((totaldata < expitideddata) && c==0)
+                if ((totaldata < expitideddata) && c == 0)
                 {
                     lasttoggle = !lasttoggle;
                     requestNextSegment(lasttoggle);
@@ -400,7 +421,11 @@ namespace libCanopenSimple
             return false;
         }
 
-        public void requestNextSegment(bool toggle)
+        /// <summary>
+        /// Request the next segment in a segmented transfet
+        /// </summary>
+        /// <param name="toggle">Segmented transfer toggle flag, should alternate for each successive transfer</param>
+        private void requestNextSegment(bool toggle)
         {
 
             timeout = DateTime.Now + new TimeSpan(0, 0, 5);
@@ -412,8 +437,6 @@ namespace libCanopenSimple
                     cmd |= 0x10;
 
                 sendpacket(cmd, new byte[4]);
-
-                //totaldata += 7;
             }
             else
             {
@@ -431,44 +454,27 @@ namespace libCanopenSimple
 
                 nextdata = new byte[bytecount];
 
-                for (int x=0;x<bytecount;x++)
+                for (int x = 0; x < bytecount; x++)
                 {
                     if (databuffer.Length > (totaldata + x))
                         nextdata[x] = databuffer[totaldata + x];
 
                 }
 
-                if (totaldata+7>=databuffer.Length)
+                if (totaldata + 7 >= databuffer.Length)
                 {
                     cmd |= 0x01; //END of packet sequence
                 }
 
-                if(bytecount!=7)
+                if (bytecount != 7)
                 {
-
-                    //BYTECOUNT = 8 - (7 - n);
-
-                    //bytecount - 8 = - 7 + N
-
-                    //(BYTECOUNT - 8) + 7 = n
-
                     int n = 7 - bytecount;
-                    //int n = (bytecount - 8 ) +7;
-
                     n = n << 1;
-
-
-      
                     cmd |= (byte)n;
-
                 }
 
                 sendpacketsegment(cmd, nextdata);
-
                 totaldata += (uint)bytecount;
-
-               // Console.WriteLine("TX TOTAL DATA is " + totaldata.ToString());
-
             }
 
         }

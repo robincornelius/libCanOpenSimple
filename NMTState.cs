@@ -1,4 +1,7 @@
-﻿using System;
+﻿/// libCanopenSimple
+/// Robin Cornelius <robin.cornelius@gmail.com>
+
+using System;
 
 namespace libCanopenSimple
 {
