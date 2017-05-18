@@ -11,10 +11,6 @@ using System.Collections.Concurrent;
 
 namespace libCanopenSimple
 {
-
-
-
-
     public enum BUSSPEED
     {
 
@@ -54,8 +50,6 @@ namespace libCanopenSimple
             {
                 output += string.Format(" {0:x2}", data[x]);
             }
-
-
             return output;
         }
 
@@ -78,8 +72,6 @@ namespace libCanopenSimple
         public DateTime lastping;
         public bool compulsory;
 
-       
-
         public Action<e_NMTState> NMT_boot = null;
         public Action<int> NMT_guard = null;
 
@@ -95,13 +87,13 @@ namespace libCanopenSimple
             state = newstate;
             lastping = DateTime.Now;
 
-            
-
-            if(newstate == e_NMTState.BOOT)
+            if (newstate == e_NMTState.BOOT)
+            {
                 if (state != laststate && NMT_boot != null)
                 {
                     NMT_boot(state);
                 }
+            }
         }
     }
 
@@ -298,20 +290,45 @@ namespace libCanopenSimple
         public Dictionary<UInt16, SDO> SDOcallbacks = new Dictionary<ushort, SDO>();
         ConcurrentQueue<canpacket> packetqueue = new ConcurrentQueue<canpacket>();
 
-        public Action<canpacket> loggercallback_SDO = null;
-        public Action<canpacket> loggercallback_NMTEC = null;
-        public Action<canpacket> loggercallback_NMT = null;
-        public Action<canpacket[]> loggercallback_PDO = null;
-        public Action<canpacket> loggercallback_EMCY = null;
-        public Action<canpacket> loggercallback_LSS = null;
-        public Action<canpacket> loggercallback_TIME = null;
-        public Action<canpacket> loggercallback_SYNC = null;
+        //public Action<canpacket> loggercallback_SDO = null;
+        //public Action<canpacket> loggercallback_NMTEC = null;
+        //public Action<canpacket> loggercallback_NMT = null;
+        //public Action<canpacket[]> loggercallback_PDO = null;
+        //public Action<canpacket> loggercallback_EMCY = null;
+        //public Action<canpacket> loggercallback_LSS = null;
+        //public Action<canpacket> loggercallback_TIME = null;
+        //public Action<canpacket> loggercallback_SYNC = null;
+
+        public delegate void SDOEvent(canpacket p);
+        public event SDOEvent sdoevent;
 
         public delegate void NMTEvent(canpacket p);
         public event NMTEvent nmtevent;
 
         public delegate void NMTECEvent(canpacket p);
         public event NMTECEvent nmtecevent;
+
+        public delegate void PDOEvent(canpacket[] p);
+        public event PDOEvent pdoevent;
+
+        public delegate void EMCYEvent(canpacket p);
+        public event EMCYEvent emcyevent;
+
+        public delegate void LSSEvent(canpacket p);
+        public event LSSEvent lssevent;
+
+        public delegate void TIMEEvent(canpacket p);
+        public event TIMEEvent timeevent;
+
+        public delegate void SYNCEvent(canpacket p);
+        public event SYNCEvent syncevent;
+
+
+
+
+
+
+
 
         bool threadrun = true;
 
@@ -394,14 +411,16 @@ namespace libCanopenSimple
                             }
                         }
 
-                        if (loggercallback_SDO != null)
-                            loggercallback_SDO(cp);
+
+                        if (sdoevent != null)
+                            sdoevent(cp);
                     }
 
                     if (cp.cob >= 0x600 && cp.cob < 0x680)
                     {
-                        if (loggercallback_SDO != null)
-                            loggercallback_SDO(cp);
+                        if (sdoevent != null)
+                            sdoevent(cp);
+
                     }
 
                     //NMT
@@ -414,17 +433,12 @@ namespace libCanopenSimple
                         nmtstate[node].changestate((NMTState.e_NMTState)cp.data[0]);
                         nmtstate[node].lastping = DateTime.Now;
 
-                        if (loggercallback_NMTEC != null)
-                            loggercallback_NMTEC(cp);
-
                         if (nmtecevent != null)
                             nmtecevent(cp);
                     }
 
                     if(cp.cob==000)
                     {
-                        if (loggercallback_NMT != null)
-                            loggercallback_NMT(cp);
 
                         if (nmtevent != null)
                             nmtevent(cp);
@@ -432,27 +446,32 @@ namespace libCanopenSimple
                     }
                     if (cp.cob == 0x80)
                     {
-                        if (loggercallback_SYNC != null)
-                            loggercallback_SYNC(cp);
+                        if (syncevent != null)
+                            syncevent(cp);
+
                     }
 
                     if (cp.cob > 0x080 && cp.cob <= 0xFF)
                     {
-                        if (loggercallback_EMCY != null)
-                            loggercallback_EMCY(cp);
+
+                        if(emcyevent!=null)
+                        {
+                            emcyevent(cp);
+                        }
 
                     }
 
                     if (cp.cob == 0x100)
                     {
-                        if (loggercallback_TIME != null)
-                            loggercallback_TIME(cp);
+                        if (timeevent != null)
+                            timeevent(cp);
                     }
 
                     if (cp.cob > 0x7E4 && cp.cob <= 0x7E5)
                     {
-                        if (loggercallback_LSS != null)
-                            loggercallback_LSS(cp);
+
+                        if (lssevent != null)
+                            lssevent(cp);
 
                     }
 
@@ -460,8 +479,8 @@ namespace libCanopenSimple
 
                 if(pdos.Count>0)
                 {
-                    if (loggercallback_PDO != null)
-                        loggercallback_PDO(pdos.ToArray());
+                    if (pdoevent != null)
+                        pdoevent(pdos.ToArray());
                 }
 
                     SDO.kick_SDO();

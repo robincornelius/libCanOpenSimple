@@ -41,6 +41,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="DriverLoader.cs" />
     <Compile Include="libCanopenSimple.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SDO.cs" />
@@ -49,10 +50,6 @@
     <ProjectReference Include="..\CanMonitor\Settings\Settings.csproj">
       <Project>{d77e70e0-5808-4f97-a2a1-fc23d03aef6a}</Project>
       <Name>Settings</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\NNanomsg\NNanomsg\NNanomsg.csproj">
-      <Project>{771786bf-42fa-491e-9fb3-29910f15cc5e}</Project>
-      <Name>NNanomsg</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
