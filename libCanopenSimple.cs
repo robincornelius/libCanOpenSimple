@@ -2,13 +2,11 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Collections.Concurrent;
-using System.Reflection;
 
 namespace libCanopenSimple
 {
     public enum BUSSPEED
     {
-
         BUS_10Kbit = 0,
         BUS_20Kbit,
         BUS_50Kbit,
@@ -18,7 +16,6 @@ namespace libCanopenSimple
         BUS_500Kbit,
         BUS_800Kbit,
         BUS_1Mbit,
-
     }
 
     public enum debuglevel
@@ -27,19 +24,60 @@ namespace libCanopenSimple
         DEBUG_NONE
     }
 
+    /// <summary>
+    /// C# representation of a CanPacket, containing the COB the length and the data. RTR is not supported
+    /// as its prettly much not used on CanOpen, but this could be added later if necessary
+    /// </summary>
     public class canpacket
     {
         public UInt16 cob;
         public byte len;
         public byte[] data;
-     
-        
 
-        public string ToString()
+        public canpacket()
         {
-            string output;
+        }
 
-            output = string.Format("{0:x3} {1:x1}", cob, len);
+        /// <summary>
+        /// Construct C# Canpacket from a CanFestival message
+        /// </summary>
+        /// <param name="msg">A CanFestival message struct</param>
+        public canpacket(DriverInstance.Message msg)
+        {
+            cob = msg.cob_id;
+            len = msg.len;
+            data = new byte[len];
+
+            byte[] temp = BitConverter.GetBytes(msg.data);
+            Array.Copy(temp, data, msg.len);
+        }
+
+        /// <summary>
+        /// Convert to a CanFestival message
+        /// </summary>
+        /// <returns>CanFestival message</returns>
+        public DriverInstance.Message ToMsg()
+        {
+            DriverInstance.Message msg = new DriverInstance.Message();
+            msg.cob_id = cob;
+            msg.len = len;
+            msg.rtr = 0;
+
+            byte[] temp = new byte[8];
+            Array.Copy(data, temp, len);
+            msg.data = BitConverter.ToUInt64(temp, 0);
+
+            return msg;
+
+        }
+
+        /// <summary>
+        /// Dump current packet to string
+        /// </summary>
+        /// <returns>Formatted string of current packet</returns>
+        public override string ToString()
+        {
+            string output = string.Format("{0:x3} {1:x1}", cob, len);
 
             for(int x=0;x<len;x++)
             {
@@ -47,73 +85,31 @@ namespace libCanopenSimple
             }
             return output;
         }
-
     }
 
-    public class NMTState
-    {
-        public enum e_NMTState
-        {
-            BOOT = 0,
-            STOPPED = 4,
-            OPERATIONAL = 5,
-            PRE_OPERATIONAL = 127,
-            INVALID = 0xff,
-
-        }
-
-        public e_NMTState state;
-        public e_NMTState laststate;
-        public DateTime lastping;
-        public bool compulsory;
-
-        public Action<e_NMTState> NMT_boot = null;
-        public Action<int> NMT_guard = null;
-
-        public NMTState()
-        {
-            state = e_NMTState.INVALID;
-            laststate = e_NMTState.INVALID;
-        }
-
-        public void changestate(e_NMTState newstate)
-        {
-            laststate = state;
-            state = newstate;
-            lastping = DateTime.Now;
-
-            if (newstate == e_NMTState.BOOT)
-            {
-                if (state != laststate && NMT_boot != null)
-                {
-                    NMT_boot(state);
-                }
-            }
-        }
-    }
-
-    public class libCanopen
+   
+    /// <summary>
+    /// A simple can open class providing callbacks for each of the message classes and allowing one to send messages to the bus
+    /// Also supports some NMT helper functions and can act as a SDO Client
+    /// It is not a CanDevice and does not respond to any message (other than the required SDO client handshakes) and it does not
+    /// contain an object dictionary
+    /// </summary>
+    public class libCanopenSimple
     {
 
         public debuglevel dbglevel = debuglevel.DEBUG_NONE;
         public bool echo = true;
 
-        public bool ipcisopen = false;
-
-        DriverLoader loader;
-        
-       
         DriverInstance driver;
 
         Dictionary<UInt16, NMTState> nmtstate = new Dictionary<ushort, NMTState>();
 
         private Queue<SDO> sdo_queue = new Queue<SDO>();
 
-        public libCanopen()
-        {
+        DriverLoader loader = new DriverLoader();
 
-            loader = new DriverLoader();
-          
+        public libCanopenSimple()
+        {
             //preallocate all NMT guards
             for (byte x=0;x<0x80;x++)
             {
@@ -124,14 +120,18 @@ namespace libCanopenSimple
 
         #region driverinterface
 
-        public void open(int comport, BUSSPEED speed)
+        /// <summary>
+        /// Open the CAN hardware device via the CanFestival driver, NB this is currently a simple version that will
+        /// not work with drivers that have more complex bus ids so only supports com port (inc usb serial) devices for the moment
+        /// </summary>
+        /// <param name="comport">COM PORT number</param>
+        /// <param name="speed">CAN Bit rate</param>
+        /// <param name="drivername">Driver to use</param>
+        public void open(int comport, BUSSPEED speed,string drivername)
         {
 
-            driver = loader.loaddriver("can_usb_win32");
-            DriverInstance.struct_s_BOARD brd = new DriverInstance.struct_s_BOARD();
-            brd.busname = string.Format("COM{0}", comport);
-            brd.baudrate = "500K";
-            driver.open(brd);
+            driver = loader.loaddriver(drivername);
+            driver.open(string.Format("COM{0}", comport), speed);
 
             driver.rxmessage += Driver_rxmessage;
 
@@ -142,23 +142,25 @@ namespace libCanopenSimple
 
         }
 
+        /// <summary>
+        /// Is the driver open
+        /// </summary>
+        /// <returns>true = driver open and ready to use</returns>
         public bool isopen()
         {
-            //FIXME
-            return true;
+            if (driver == null)
+                return false;
+
+            return driver.isOpen();
         }
 
+        /// <summary>
+        /// Send a Can packet on the bus
+        /// </summary>
+        /// <param name="p"></param>
         public void SendPacket(canpacket p)
         {
-
-            DriverInstance.Message msg = new DriverInstance.Message();
-            msg.cob_id = p.cob;
-            msg.len = p.len;
-            msg.rtr = 0;
-
-            byte[] temp = new byte[8];
-            Array.Copy(p.data, temp, p.len);
-            msg.data = BitConverter.ToUInt64(temp,0);
+            DriverInstance.Message msg = p.ToMsg();
 
             driver.cansend(msg);
 
@@ -166,22 +168,21 @@ namespace libCanopenSimple
             {
                 Driver_rxmessage(msg);
             }
-
         }
 
+        /// <summary>
+        /// Recieved message callback handler
+        /// </summary>
+        /// <param name="msg">CanOpen message recieved from the bus</param>
         private void Driver_rxmessage(DriverInstance.Message msg)
         {
-            canpacket cp = new canpacket();
-            cp.cob = msg.cob_id;
-            cp.len = msg.len;
-            cp.data = new byte[cp.len];
-
-            byte[] temp = BitConverter.GetBytes(msg.data);
-            Array.Copy(temp, cp.data, msg.len);
-            packetqueue.Enqueue(cp);
+            packetqueue.Enqueue(new canpacket(msg));
         }
 
 
+        /// <summary>
+        /// Close the CanOpen CanFestival driver
+        /// </summary>
         public void close()
         {
             if (driver == null)
@@ -222,11 +223,22 @@ namespace libCanopenSimple
 
         bool threadrun = true;
 
+        /// <summary>
+        /// Register a parser handler for a PDO, if a PDO is recieved with a matching COB this function will be called
+        /// so that additional messages can be added for bus decoding and monitoring
+        /// </summary>
+        /// <param name="cob">COB to match</param>
+        /// <param name="handler">function(byte[] data]{} function to invoke</param>
         public void registerPDOhandler(UInt16 cob, Action<byte[]> handler)
         {
             PDOcallbacks[cob] = handler;
         }
 
+        /// <summary>
+        /// Main process loop, used to get latest packets from buffer and also keep the SDO events pumped
+        /// When packets are recieved they will be matched to any approprate callback handlers for this specific COB type
+        /// and that handler invoked.
+        /// </summary>
         void asyncprocess()
         {
             while (threadrun)
@@ -343,36 +355,90 @@ namespace libCanopenSimple
 
         #region SDOHelpers
 
+        /// <summary>
+        /// Write to a node via SDO
+        /// </summary>
+        /// <param name="node">Node ID</param>
+        /// <param name="index">Object Dictionary Index</param>
+        /// <param name="subindex">Object Dictionary sub index</param>
+        /// <param name="udata">UInt32 data to send</param>
+        /// <param name="completedcallback">Call back on finished/error event</param>
+        /// <returns>SDO class that is used to perform the packet handshake, contains error/status codes</returns>
         public SDO SDOwrite(byte node, UInt16 index, byte subindex, UInt32 udata, Action<SDO> completedcallback)
         {
             byte[] bytes = BitConverter.GetBytes(udata);
             return SDOwrite(node, index, subindex, bytes, completedcallback);
         }
 
+        /// <summary>
+        /// Write to a node via SDO
+        /// </summary>
+        /// <param name="node">Node ID</param>
+        /// <param name="index">Object Dictionary Index</param>
+        /// <param name="subindex">Object Dictionary sub index</param>
+        /// <param name="udata">Int32 data to send</param>
+        /// <param name="completedcallback">Call back on finished/error event</param>
+        /// <returns>SDO class that is used to perform the packet handshake, contains error/status codes</returns>
         public SDO SDOwrite(byte node, UInt16 index, byte subindex, Int32 udata, Action<SDO> completedcallback)
         {
             byte[] bytes = BitConverter.GetBytes(udata);
             return SDOwrite(node, index, subindex, bytes, completedcallback);
         }
 
+        /// <summary>
+        /// Write to a node via SDO
+        /// </summary>
+        /// <param name="node">Node ID</param>
+        /// <param name="index">Object Dictionary Index</param>
+        /// <param name="subindex">Object Dictionary sub index</param>
+        /// <param name="udata">UInt16 data to send</param>
+        /// <param name="completedcallback">Call back on finished/error event</param>
+        /// <returns>SDO class that is used to perform the packet handshake, contains error/status codes</returns>
         public SDO SDOwrite(byte node, UInt16 index, byte subindex, Int16 udata, Action<SDO> completedcallback)
         {
             byte[] bytes = BitConverter.GetBytes(udata);
             return SDOwrite(node, index, subindex, bytes, completedcallback);
         }
 
+        /// <summary>
+        /// Write to a node via SDO
+        /// </summary>
+        /// <param name="node">Node ID</param>
+        /// <param name="index">Object Dictionary Index</param>
+        /// <param name="subindex">Object Dictionary sub index</param>
+        /// <param name="udata">UInt16 data to send</param>
+        /// <param name="completedcallback">Call back on finished/error event</param>
+        /// <returns>SDO class that is used to perform the packet handshake, contains error/status codes</returns>
         public SDO SDOwrite(byte node, UInt16 index, byte subindex, UInt16 udata, Action<SDO> completedcallback)
         {
             byte[] bytes = BitConverter.GetBytes(udata);
             return SDOwrite(node, index, subindex, bytes, completedcallback);
         }
 
+        /// <summary>
+        /// Write to a node via SDO
+        /// </summary>
+        /// <param name="node">Node ID</param>
+        /// <param name="index">Object Dictionary Index</param>
+        /// <param name="subindex">Object Dictionary sub index</param>
+        /// <param name="udata">float data to send</param>
+        /// <param name="completedcallback">Call back on finished/error event</param>
+        /// <returns>SDO class that is used to perform the packet handshake, contains error/status codes</returns>
         public SDO SDOwrite(byte node, UInt16 index, byte subindex, float ddata, Action<SDO> completedcallback)
         {
             byte[] bytes = BitConverter.GetBytes(ddata);
             return SDOwrite(node, index, subindex, bytes, completedcallback);
         }
 
+        /// <summary>
+        /// Write to a node via SDO
+        /// </summary>
+        /// <param name="node">Node ID</param>
+        /// <param name="index">Object Dictionary Index</param>
+        /// <param name="subindex">Object Dictionary sub index</param>
+        /// <param name="udata">a byte of data to send</param>
+        /// <param name="completedcallback">Call back on finished/error event</param>
+        /// <returns>SDO class that is used to perform the packet handshake, contains error/status codes</returns>
         public SDO SDOwrite(byte node, UInt16 index, byte subindex, byte udata, Action<SDO> completedcallback)
         {
             byte[] bytes = new byte[1];
@@ -380,6 +446,15 @@ namespace libCanopenSimple
             return SDOwrite(node, index, subindex, bytes, completedcallback);
         }
 
+        /// <summary>
+        /// Write to a node via SDO
+        /// </summary>
+        /// <param name="node">Node ID</param>
+        /// <param name="index">Object Dictionary Index</param>
+        /// <param name="subindex">Object Dictionary sub index</param>
+        /// <param name="udata">a byte of unsigned data to send</param>
+        /// <param name="completedcallback">Call back on finished/error event</param>
+        /// <returns>SDO class that is used to perform the packet handshake, contains error/status codes</returns>
         public SDO SDOwrite(byte node, UInt16 index, byte subindex, sbyte udata, Action<SDO> completedcallback)
         {
             byte[] bytes = new byte[1];
@@ -387,6 +462,15 @@ namespace libCanopenSimple
             return SDOwrite(node, index, subindex, bytes, completedcallback);
         }
 
+        /// <summary>
+        /// Write to a node via SDO
+        /// </summary>
+        /// <param name="node">Node ID</param>
+        /// <param name="index">Object Dictionary Index</param>
+        /// <param name="subindex">Object Dictionary sub index</param>
+        /// <param name="udata">byte[] of data (1-8 bytes) to send</param>
+        /// <param name="completedcallback">Call back on finished/error event</param>
+        /// <returns>SDO class that is used to perform the packet handshake, contains error/status codes</returns>
         public SDO SDOwrite(byte node, UInt16 index, byte subindex, byte[] data, Action<SDO> completedcallback)
         {
 
@@ -395,6 +479,14 @@ namespace libCanopenSimple
             return sdo;
         }
 
+        /// <summary>
+        /// Read from a remote node via SDO
+        /// </summary>
+        /// <param name="node">Node ID to read from</param>
+        /// <param name="index">Object Dictionary Index</param>
+        /// <param name="subindex">Object Dictionary sub index</param>
+        /// <param name="completedcallback">Call back on finished/error event</param>
+        /// <returns>SDO class that is used to perform the packet handshake, contains returned data and error/status codes</returns>
         public SDO SDOread(byte node, UInt16 index, byte subindex,Action<SDO> completedcallback)
         {
             SDO sdo = new SDO(this, node, index, subindex, SDO.direction.SDO_READ, completedcallback,null);

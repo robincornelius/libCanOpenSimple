@@ -12,7 +12,7 @@ namespace libCanopenSimple
     {
         public UInt32 expitideddata;
         UInt32 totaldata;
-        libCanopen can;
+        libCanopenSimple can;
 
         public UInt16 index;
         public byte subindex;
@@ -52,7 +52,7 @@ namespace libCanopenSimple
 
         public SDO_STATE state;
 
-        public SDO(libCanopen can, byte node, UInt16 index, byte subindex, direction dir, Action<SDO> completedcallback, byte[] databuffer)
+        public SDO(libCanopenSimple can, byte node, UInt16 index, byte subindex, direction dir, Action<SDO> completedcallback, byte[] databuffer)
         {
             this.can = can;
             this.index = index;

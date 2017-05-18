@@ -43,6 +43,7 @@
   <ItemGroup>
     <Compile Include="DriverLoader.cs" />
     <Compile Include="libCanopenSimple.cs" />
+    <Compile Include="NMTState.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SDO.cs" />
   </ItemGroup>

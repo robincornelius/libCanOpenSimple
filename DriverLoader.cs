@@ -1,4 +1,7 @@
-﻿using System;
+﻿/// Can Festival driver loader for C#
+/// Robin Cornelius <robin.cornelius@gmail.com>
+
+using System;
 using System.Runtime.InteropServices;
 
 namespace libCanopenSimple
@@ -67,6 +70,18 @@ namespace libCanopenSimple
         DriverInstance driver;
 
         /// <summary>
+        /// Clean up and free the library
+        /// </summary>
+        ~DriverLoaderWin()
+        {
+            if(Handle != IntPtr.Zero)
+            {
+                FreeLibrary(Handle);
+                Handle = IntPtr.Zero;
+            }
+        }
+
+        /// <summary>
         /// Attempt to load the requested can festival driver and return a DriverInstance class
         /// </summary>
         /// <param name="fileName">Load can festival driver (Windows .Net runtime version) .dll must be appeneded in this case to fileName</param>
@@ -102,6 +117,7 @@ namespace libCanopenSimple
 
             return driver;
         }
+
     }
     #endregion
 
@@ -210,26 +226,7 @@ namespace libCanopenSimple
             public String baudrate; /**< The board baudrate */
         };
 
-        /// <summary>
-        /// Create a new DriverInstance, this class provides a wrapper between the C# world and the C API dlls from canfestival that
-        /// provide access to the CAN hardware devices. The exposed delegates represent the 5 defined entry points that all can festival
-        /// drivers expose to form the common driver interface API. Usualy the DriverLoader class will directly call this constructor.
-        /// </summary>
-        /// <param name="canReceive">pInvoked delegate for canReceive function</param>
-        /// <param name="canSend">pInvoked delegate for canSend function</param>
-        /// <param name="canOpen">pInvoked delegate for canOpen function</param>
-        /// <param name="canClose">pInvoked delegate for canClose function</param>
-        /// <param name="canChangeBaudrate">pInvoked delegate for canChangeBaudrate functipn</param>
-        public DriverInstance(canReceive_T canReceive,canSend_T canSend,canOpen_T canOpen,canClose_T canClose, canChangeBaudRate_T canChangeBaudrate)
-        {
-            this.canReceive = canReceive;
-            this.canSend = canSend;
-            this.canOpen = canOpen;
-            this.canClose = canClose;
-            this.canChangeBaudrate = canChangeBaudrate;
-        }
 
-        
         public delegate byte canReceive_T(IntPtr handle, IntPtr msg);
         private canReceive_T canReceive;
 
@@ -246,23 +243,112 @@ namespace libCanopenSimple
         private canChangeBaudRate_T canChangeBaudrate;
 
         private IntPtr handle;
-
         IntPtr brdptr;
 
+        struct_s_BOARD brd;
+
         /// <summary>
-        /// Open the CAN device
+        /// Create a new DriverInstance, this class provides a wrapper between the C# world and the C API dlls from canfestival that
+        /// provide access to the CAN hardware devices. The exposed delegates represent the 5 defined entry points that all can festival
+        /// drivers expose to form the common driver interface API. Usualy the DriverLoader class will directly call this constructor.
         /// </summary>
-        /// <param name="brd">The requested CAN bit rate and the requested bus ID are provided here.</param>
-        public void open(struct_s_BOARD brd)
+        /// <param name="canReceive">pInvoked delegate for canReceive function</param>
+        /// <param name="canSend">pInvoked delegate for canSend function</param>
+        /// <param name="canOpen">pInvoked delegate for canOpen function</param>
+        /// <param name="canClose">pInvoked delegate for canClose function</param>
+        /// <param name="canChangeBaudrate">pInvoked delegate for canChangeBaudrate functipn</param>
+        public DriverInstance(canReceive_T canReceive, canSend_T canSend, canOpen_T canOpen, canClose_T canClose, canChangeBaudRate_T canChangeBaudrate)
         {
-           
-            brdptr = Marshal.AllocHGlobal(Marshal.SizeOf(brd));
-            Marshal.StructureToPtr(brd, brdptr, false);
+            this.canReceive = canReceive;
+            this.canSend = canSend;
+            this.canOpen = canOpen;
+            this.canClose = canClose;
+            this.canChangeBaudrate = canChangeBaudrate;
 
-            handle = canOpen(brdptr);
+            handle = IntPtr.Zero;
+            brdptr = IntPtr.Zero;
 
-            rxthread = new System.Threading.Thread(rxthreadworker);
-            rxthread.Start();
+        }
+
+        /// <summary>
+        /// Open the CAN device, the bus ID and bit rate are passed to driver. For Serial/USb Seral pass COMx etc.
+        /// </summary>
+        /// <param name="bus">The requested bus ID are provided here.</param>
+        /// <param name="speed">The requested CAN bit rate</param>
+        /// <returns>True on succesful opening of device</returns>
+        public bool open(string bus, BUSSPEED speed)
+        {
+
+            try
+            {
+
+
+                brd.busname = bus;
+
+                // Map BUSSPEED to CanFestival speed options
+                switch (speed)
+                {
+                    case BUSSPEED.BUS_10Kbit:
+                        brd.baudrate = "10K";
+                        break;
+                    case BUSSPEED.BUS_20Kbit:
+                        brd.baudrate = "20K";
+                        break;
+                    case BUSSPEED.BUS_50Kbit:
+                        brd.baudrate = "50K";
+                        break;
+                    case BUSSPEED.BUS_100Kbit:
+                        brd.baudrate = "100K";
+                        break;
+                    case BUSSPEED.BUS_125Kbit:
+                        brd.baudrate = "125K";
+                        break;
+                    case BUSSPEED.BUS_250Kbit:
+                        brd.baudrate = "250K";
+                        break;
+                    case BUSSPEED.BUS_500Kbit:
+                        brd.baudrate = "500K";
+                        break;
+                    case BUSSPEED.BUS_1Mbit:
+                        brd.baudrate = "1M";
+                        break;
+
+                }
+
+                brdptr = Marshal.AllocHGlobal(Marshal.SizeOf(brd));
+                Marshal.StructureToPtr(brd, brdptr, false);
+
+                handle = canOpen(brdptr);
+
+                if (handle != IntPtr.Zero)
+                {
+
+                    rxthread = new System.Threading.Thread(rxthreadworker);
+                    rxthread.Start();
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            catch(Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// See if the CAN device is open
+        /// </summary>
+        /// <returns>Open status of can device</returns>
+        public bool isOpen()
+        {
+            if (handle == IntPtr.Zero)
+                return false;
+
+
+            return true;
         }
 
         /// <summary>
@@ -275,8 +361,12 @@ namespace libCanopenSimple
             if(handle!=IntPtr.Zero)
                 canClose(handle);
 
+            handle = IntPtr.Zero;
+
             if(brdptr!=IntPtr.Zero)
                 Marshal.FreeHGlobal(brdptr);
+
+            brdptr = IntPtr.Zero;
         }
 
         /// <summary>
@@ -337,8 +427,5 @@ namespace libCanopenSimple
                 System.Threading.Thread.Sleep(0);
             }
         }
-
-
     }
-
 }
