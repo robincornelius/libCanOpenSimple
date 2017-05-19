@@ -6,3 +6,8 @@
 /bin/Release
 /obj/*
 .vs/*
+*.pdb
+*.dll
+*.ilk
+*.exp
+*.lib

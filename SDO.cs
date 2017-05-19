@@ -53,6 +53,9 @@ namespace libCanopenSimple
 
         public readonly byte node;
 
+        //FIX me i was using all these from outside this class
+        //should see if that is really needed or if better accessors are required
+        //may be readonly access etc.
         public byte[] databuffer = null;
         public SDO_STATE state;
         public UInt16 index;
