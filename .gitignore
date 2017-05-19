@@ -1,2 +1,8 @@
+*/bin/Debug
+*/obj/Debug
+*/bin/Release
+*/obj/Release
 /bin/Debug
-/obj/Debug
+/bin/Release
+/obj/*
+.vs/*
