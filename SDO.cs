@@ -53,15 +53,19 @@ namespace libCanopenSimple
 
         public readonly byte node;
 
+        public byte[] databuffer = null;
+        public SDO_STATE state;
+        public UInt16 index;
+        public byte subindex;
+        public UInt32 expitideddata;
+
         static List<SDO> activeSDO = new List<SDO>();
 
         private Action<SDO> completedcallback;
-        private byte[] databuffer = null;
-        private SDO_STATE state;
+      
+      
         private direction dir;
-        private UInt16 index;
-        private byte subindex;
-        private UInt32 expitideddata;
+      
         private UInt32 totaldata;
         private libCanopenSimple can;
         private bool lasttoggle = false;
