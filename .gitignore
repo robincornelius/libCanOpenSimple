@@ -11,3 +11,4 @@
 *.ilk
 *.exp
 *.lib
+/libCanopenSimple.VC.db
