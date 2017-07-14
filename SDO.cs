@@ -61,6 +61,7 @@ namespace libCanopenSimple
         public UInt16 index;
         public byte subindex;
         public UInt32 expitideddata;
+        public bool expitided = false;
 
         static List<SDO> activeSDO = new List<SDO>();
 
@@ -184,6 +185,8 @@ namespace libCanopenSimple
                     bool wpsent = false;
                     byte cmd = 0;
 
+                    expitided = true;
+
                     switch (databuffer.Length)
                     {
                         case 1:
@@ -201,6 +204,7 @@ namespace libCanopenSimple
                         default:
                             //Bigger than 4 bytes we use segmented transfer
                             cmd = 0x21;
+                            expitided = false;
 
                             byte[] payload = new byte[4];
                             payload[0] = (byte)databuffer.Length;
@@ -343,9 +347,12 @@ namespace libCanopenSimple
                     {
                         if ((index == sdo.index && sub == sdo.subindex)) //if segments break its here
                         {
-                            state = SDO_STATE.SDO_HANDSHAKE;
-                            requestNextSegment(false);
-                            return false;
+                            if (expitided == false)
+                            {
+                                state = SDO_STATE.SDO_HANDSHAKE;
+                                requestNextSegment(false);
+                                return false;
+                            }
                         }
 
                     }

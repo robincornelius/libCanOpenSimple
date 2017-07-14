@@ -357,10 +357,13 @@ namespace libCanopenSimple
                     {
                         if (!SDOcallbacks.ContainsKey((UInt16)(front.node + 0x580)))
                         {
-                            front = sdo_queue.Dequeue();
-                            //Listen for the reply on 0x580+node id
-                            SDOcallbacks.Add((UInt16)(front.node + 0x580), front);
-                            front.sendSDO();
+                            if (sdo_queue.Count > 0)
+                            {
+                                front = sdo_queue.Dequeue();
+                                //Listen for the reply on 0x580+node id
+                                SDOcallbacks.Add((UInt16)(front.node + 0x580), front);
+                                front.sendSDO();
+                            }
                         }
                     }
                 }
@@ -381,6 +384,37 @@ namespace libCanopenSimple
         /// <param name="completedcallback">Call back on finished/error event</param>
         /// <returns>SDO class that is used to perform the packet handshake, contains error/status codes</returns>
         public SDO SDOwrite(byte node, UInt16 index, byte subindex, UInt32 udata, Action<SDO> completedcallback)
+        {
+            byte[] bytes = BitConverter.GetBytes(udata);
+            return SDOwrite(node, index, subindex, bytes, completedcallback);
+        }
+
+
+        /// <summary>
+        /// Write to a node via SDO
+        /// </summary>
+        /// <param name="node">Node ID</param>
+        /// <param name="index">Object Dictionary Index</param>
+        /// <param name="subindex">Object Dictionary sub index</param>
+        /// <param name="udata">Int64 data to send</param>
+        /// <param name="completedcallback">Call back on finished/error event</param>
+        /// <returns>SDO class that is used to perform the packet handshake, contains error/status codes</returns>
+        public SDO SDOwrite(byte node, UInt16 index, byte subindex, Int64 udata, Action<SDO> completedcallback)
+        {
+            byte[] bytes = BitConverter.GetBytes(udata);
+            return SDOwrite(node, index, subindex, bytes, completedcallback);
+        }
+
+        /// <summary>
+        /// Write to a node via SDO
+        /// </summary>
+        /// <param name="node">Node ID</param>
+        /// <param name="index">Object Dictionary Index</param>
+        /// <param name="subindex">Object Dictionary sub index</param>
+        /// <param name="udata">UInt64 data to send</param>
+        /// <param name="completedcallback">Call back on finished/error event</param>
+        /// <returns>SDO class that is used to perform the packet handshake, contains error/status codes</returns>
+        public SDO SDOwrite(byte node, UInt16 index, byte subindex, UInt64 udata, Action<SDO> completedcallback)
         {
             byte[] bytes = BitConverter.GetBytes(udata);
             return SDOwrite(node, index, subindex, bytes, completedcallback);
