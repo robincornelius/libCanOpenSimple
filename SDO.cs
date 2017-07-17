@@ -113,6 +113,11 @@ namespace libCanopenSimple
                 activeSDO.Add(this);
         }
 
+        public static bool isEmpty()
+        {
+            return activeSDO.Count == 0;
+        }
+
         /// <summary>
         /// Has the SDO transfer finished?
         /// </summary>

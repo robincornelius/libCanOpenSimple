@@ -201,6 +201,8 @@ namespace libCanopenSimple
         /// </summary>
         public void close()
         {
+            threadrun = false;
+
             if (driver == null)
                 return;
 
@@ -261,6 +263,12 @@ namespace libCanopenSimple
             {
                 canpacket cp;
                 List<canpacket> pdos = new List<canpacket>();
+
+                while (threadrun && packetqueue.IsEmpty && pdos.Count==0 && sdo_queue.Count==0 && SDO.isEmpty())
+                {
+                    System.Threading.Thread.Sleep(1);
+                }
+
                 while (packetqueue.TryDequeue(out cp))
                 {
                     //PDO 0x180 -- 0x57F
@@ -367,7 +375,8 @@ namespace libCanopenSimple
                         }
                     }
                 }
-                // System.Threading.Thread.Sleep(1);
+
+                //System.Threading.Thread.Sleep(1);
             }
         }
 
