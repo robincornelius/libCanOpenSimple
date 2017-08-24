@@ -585,7 +585,7 @@ namespace libCanopenSimple
             p.cob = 000;
             p.len = 2;
             p.data = new byte[2];
-            p.data[0] = 0x80;
+            p.data[0] = 0x02;
             p.data[1] = nodeid;
             SendPacket(p);
         }
