@@ -370,6 +370,14 @@ namespace libCanopenSimple
         {
             threadrun = false;
 
+            System.Threading.Thread.Sleep(100);
+
+            if(rxthread!=null)
+            while(rxthread.ThreadState == System.Threading.ThreadState.Running)
+            {
+                System.Threading.Thread.Sleep(1);
+            }
+
             if (handle != IntPtr.Zero)
                 canClose(handle);
 
@@ -425,18 +433,25 @@ namespace libCanopenSimple
         /// </summary>
         private void rxthreadworker()
         {
-            while (threadrun)
+            try
+            {
+                while (threadrun)
+                {
+
+                    DriverInstance.Message rxmsg = canreceive();
+
+                    if (rxmsg.len != 0)
+                    {
+                        if (rxmessage != null)
+                            rxmessage(rxmsg);
+                    }
+
+                    System.Threading.Thread.Sleep(1);
+                }
+            }
+            catch
             {
 
-                DriverInstance.Message rxmsg = canreceive();
-
-                if (rxmsg.len != 0)
-                {
-                    if (rxmessage != null)
-                        rxmessage(rxmsg);
-                }
-
-                System.Threading.Thread.Sleep(1);
             }
         }
     }
