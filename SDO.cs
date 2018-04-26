@@ -399,8 +399,14 @@ namespace libCanopenSimple
                 state = SDO_STATE.SDO_FINISHED;
 
                 if (completedcallback != null)
-                    completedcallback(this);
+                {
+                    try
+                    {
+                        completedcallback(this);
+                    }
+                    catch { }
 
+                }
                 return true;
             }
 
