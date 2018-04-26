@@ -143,11 +143,11 @@ namespace libCanopenSimple
         /// <param name="comport">COM PORT number</param>
         /// <param name="speed">CAN Bit rate</param>
         /// <param name="drivername">Driver to use</param>
-        public void open(int comport, BUSSPEED speed, string drivername)
+        public void open(string comport, BUSSPEED speed, string drivername)
         {
 
             driver = loader.loaddriver(drivername);
-            driver.open(string.Format("COM{0}", comport), speed);
+            driver.open(string.Format("{0}", comport), speed);
 
             driver.rxmessage += Driver_rxmessage;
 
