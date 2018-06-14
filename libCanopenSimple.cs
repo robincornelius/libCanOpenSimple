@@ -553,6 +553,23 @@ namespace libCanopenSimple
             return sdo;
         }
 
+        /// <summary>
+        /// Get the current length of Enqueued items
+        /// </summary>
+        /// <returns></returns>
+        public int getSDOQueueSize()
+        {
+            return sdo_queue.Count;
+        }
+
+        /// <summary>
+        /// Flush the SDO queue
+        /// </summary>
+        public void flushSDOqueue()
+        {
+            sdo_queue.Clear();
+        }
+
         #endregion
 
         #region NMTHelpers
