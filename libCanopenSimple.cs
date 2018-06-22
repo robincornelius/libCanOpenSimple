@@ -215,28 +215,28 @@ namespace libCanopenSimple
         public Dictionary<UInt16, SDO> SDOcallbacks = new Dictionary<ushort, SDO>();
         ConcurrentQueue<canpacket> packetqueue = new ConcurrentQueue<canpacket>();
 
-        public delegate void SDOEvent(canpacket p);
+        public delegate void SDOEvent(canpacket p, DateTime dt);
         public event SDOEvent sdoevent;
 
-        public delegate void NMTEvent(canpacket p);
+        public delegate void NMTEvent(canpacket p, DateTime dt);
         public event NMTEvent nmtevent;
 
-        public delegate void NMTECEvent(canpacket p);
+        public delegate void NMTECEvent(canpacket p, DateTime dt);
         public event NMTECEvent nmtecevent;
 
-        public delegate void PDOEvent(canpacket[] p);
+        public delegate void PDOEvent(canpacket[] p,DateTime dt);
         public event PDOEvent pdoevent;
 
-        public delegate void EMCYEvent(canpacket p);
+        public delegate void EMCYEvent(canpacket p, DateTime dt);
         public event EMCYEvent emcyevent;
 
-        public delegate void LSSEvent(canpacket p);
+        public delegate void LSSEvent(canpacket p, DateTime dt);
         public event LSSEvent lssevent;
 
-        public delegate void TIMEEvent(canpacket p);
+        public delegate void TIMEEvent(canpacket p, DateTime dt);
         public event TIMEEvent timeevent;
 
-        public delegate void SYNCEvent(canpacket p);
+        public delegate void SYNCEvent(canpacket p, DateTime dt);
         public event SYNCEvent syncevent;
 
         bool threadrun = true;
@@ -296,13 +296,13 @@ namespace libCanopenSimple
                         }
 
                         if (sdoevent != null)
-                            sdoevent(cp);
+                            sdoevent(cp, DateTime.Now);
                     }
 
                     if (cp.cob >= 0x600 && cp.cob < 0x680)
                     {
                         if (sdoevent != null)
-                            sdoevent(cp);
+                            sdoevent(cp,DateTime.Now);
                     }
 
                     //NMT
@@ -314,46 +314,46 @@ namespace libCanopenSimple
                         nmtstate[node].lastping = DateTime.Now;
 
                         if (nmtecevent != null)
-                            nmtecevent(cp);
+                            nmtecevent(cp, DateTime.Now);
                     }
 
                     if (cp.cob == 000)
                     {
 
                         if (nmtevent != null)
-                            nmtevent(cp);
+                            nmtevent(cp, DateTime.Now);
                     }
                     if (cp.cob == 0x80)
                     {
                         if (syncevent != null)
-                            syncevent(cp);
+                            syncevent(cp, DateTime.Now);
                     }
 
                     if (cp.cob > 0x080 && cp.cob <= 0xFF)
                     {
                         if (emcyevent != null)
                         {
-                            emcyevent(cp);
+                            emcyevent(cp, DateTime.Now);
                         }
                     }
 
                     if (cp.cob == 0x100)
                     {
                         if (timeevent != null)
-                            timeevent(cp);
+                            timeevent(cp, DateTime.Now);
                     }
 
                     if (cp.cob > 0x7E4 && cp.cob <= 0x7E5)
                     {
                         if (lssevent != null)
-                            lssevent(cp);
+                            lssevent(cp, DateTime.Now);
                     }
                 }
 
                 if (pdos.Count > 0)
                 {
                     if (pdoevent != null)
-                        pdoevent(pdos.ToArray());
+                        pdoevent(pdos.ToArray(),DateTime.Now);
                 }
 
                 SDO.kick_SDO();
