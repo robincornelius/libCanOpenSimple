@@ -16,7 +16,10 @@
 
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace libCanopenSimple
 {
@@ -125,7 +128,12 @@ namespace libCanopenSimple
             funcaddr = GetProcAddress(Handle, "canChangeBaudRate_driver");
             DriverInstance.canChangeBaudRate_T canChangeBaudRate = Marshal.GetDelegateForFunctionPointer(funcaddr, typeof(DriverInstance.canChangeBaudRate_T)) as DriverInstance.canChangeBaudRate_T; ;
 
-            driver = new DriverInstance(canReceive, canSend, canOpen, canClose, canChangeBaudRate);
+            funcaddr = GetProcAddress(Handle, "canEnumerate2_driver");
+            DriverInstance.canEnumerate_T canEnumerate = Marshal.GetDelegateForFunctionPointer(funcaddr, typeof(DriverInstance.canEnumerate_T)) as DriverInstance.canEnumerate_T; ;
+
+            
+
+            driver = new DriverInstance(canReceive, canSend, canOpen, canClose, canChangeBaudRate,canEnumerate);
 
             return driver;
         }
@@ -185,7 +193,12 @@ namespace libCanopenSimple
             funcaddr = dlsym(Handle, "canChangeBaudRate_driver");
             DriverInstance.canChangeBaudRate_T canChangeBaudRate = Marshal.GetDelegateForFunctionPointer(funcaddr, typeof(DriverInstance.canChangeBaudRate_T)) as DriverInstance.canChangeBaudRate_T; ;
 
-            driver = new DriverInstance(canReceive, canSend, canOpen, canClose, canChangeBaudRate);
+            funcaddr = dlsym(Handle, "canEnumerate_driver");
+            DriverInstance.canEnumerate_T canEnumerate = Marshal.GetDelegateForFunctionPointer(funcaddr, typeof(DriverInstance.canEnumerate_T)) as DriverInstance.canEnumerate_T; ;
+
+            driver = new DriverInstance(canReceive, canSend, canOpen, canClose, canChangeBaudRate,canEnumerate);
+
+
 
             return driver;
         }
@@ -227,6 +240,7 @@ namespace libCanopenSimple
         /// <summary>
         /// This contains the bus name on which the can board is connected and the bit rate of the board
         /// </summary>
+
         [StructLayout(LayoutKind.Sequential)]
         public struct struct_s_BOARD
         {
@@ -238,6 +252,33 @@ namespace libCanopenSimple
             public String baudrate; /**< The board baudrate */
         };
 
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct struct_s_DEVICES
+        {
+            public UInt32 id;
+
+            [MarshalAs(UnmanagedType.LPStr)]
+            public string name;
+        };
+
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct UnmanagedStruct
+        {
+            [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPStr, SizeConst = 100)]
+            public IntPtr[] listOfStrings;
+
+            public IEnumerable<string> Strings
+            {
+                get
+                {
+                    return listOfStrings.Select(x => Marshal.PtrToStringAnsi(x));
+                }
+            }
+        }
+
+        UnmanagedStruct enumerationresult;
 
         public delegate byte canReceive_T(IntPtr handle, IntPtr msg);
         private canReceive_T canReceive;
@@ -254,6 +295,9 @@ namespace libCanopenSimple
         public delegate byte canChangeBaudRate_T(IntPtr handle, string rate);
         private canChangeBaudRate_T canChangeBaudrate;
 
+        public delegate int canEnumerate_T(ref StringBuilder[] data);
+        private canEnumerate_T canEnumerate;
+
         private IntPtr handle;
         IntPtr brdptr;
 
@@ -269,17 +313,32 @@ namespace libCanopenSimple
         /// <param name="canOpen">pInvoked delegate for canOpen function</param>
         /// <param name="canClose">pInvoked delegate for canClose function</param>
         /// <param name="canChangeBaudrate">pInvoked delegate for canChangeBaudrate functipn</param>
-        public DriverInstance(canReceive_T canReceive, canSend_T canSend, canOpen_T canOpen, canClose_T canClose, canChangeBaudRate_T canChangeBaudrate)
+        public DriverInstance(canReceive_T canReceive, canSend_T canSend, canOpen_T canOpen, canClose_T canClose, canChangeBaudRate_T canChangeBaudrate, canEnumerate_T canEnumerate)
         {
             this.canReceive = canReceive;
             this.canSend = canSend;
             this.canOpen = canOpen;
             this.canClose = canClose;
             this.canChangeBaudrate = canChangeBaudrate;
+            this.canEnumerate = canEnumerate;
+
+
+            StringBuilder[] b = new StringBuilder[2];
+
+            int length = this.canEnumerate(ref b);
+
+            //string result = Marshal.PtrToStringAnsi(p);
+
 
             handle = IntPtr.Zero;
             brdptr = IntPtr.Zero;
 
+        }
+
+
+        public void enumerate()
+        {
+          //  canEnumerate();
         }
 
         /// <summary>
