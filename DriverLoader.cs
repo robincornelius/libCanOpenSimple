@@ -295,7 +295,14 @@ namespace libCanopenSimple
         public delegate byte canChangeBaudRate_T(IntPtr handle, string rate);
         private canChangeBaudRate_T canChangeBaudrate;
 
-        public delegate int canEnumerate_T(ref StringBuilder[] data);
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate void canEnumerateDelegate_T(
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPStr, SizeParamIndex = 1)]
+        string[] values,
+        int valueCount);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate void canEnumerate_T(canEnumerateDelegate_T callback);
         private canEnumerate_T canEnumerate;
 
         private IntPtr handle;
@@ -325,20 +332,24 @@ namespace libCanopenSimple
 
             StringBuilder[] b = new StringBuilder[2];
 
-            int length = this.canEnumerate(ref b);
-
-            //string result = Marshal.PtrToStringAnsi(p);
-
-
             handle = IntPtr.Zero;
             brdptr = IntPtr.Zero;
 
         }
 
+        public static List<string> ports = new List<string>();
+
+        public static void PrintReceivedData(string[] values, int valueCount)
+        {
+            foreach (var item in values)
+                ports.Add(item);
+        }
+
 
         public void enumerate()
         {
-          //  canEnumerate();
+            ports = new List<string>();
+            this.canEnumerate(PrintReceivedData);
         }
 
         /// <summary>

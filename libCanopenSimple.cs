@@ -158,6 +158,21 @@ namespace libCanopenSimple
 
         }
 
+        public Dictionary<string, List<string>> ports = new Dictionary<string, List<string>>();
+
+        public void enumerate(string drivername)
+        {
+
+            if (!ports.ContainsKey(drivername))
+                ports.Add(drivername, new List<string>());
+
+            driver = loader.loaddriver(drivername);
+            driver.enumerate();
+
+            ports[drivername] = DriverInstance.ports;
+
+        }
+
         /// <summary>
         /// Is the driver open
         /// </summary>
