@@ -66,7 +66,7 @@ namespace DriverTest
             }
         }
 
-        private static void Instance_rxmessage(DriverInstance.Message msg)
+        private static void Instance_rxmessage(DriverInstance.Message msg, bool bridge = false)
         {
             canpacket cp = new canpacket(msg);
             Console.WriteLine("RX :" + cp.ToString());

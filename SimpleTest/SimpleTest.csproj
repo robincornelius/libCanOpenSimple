@@ -49,12 +49,6 @@
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\libCanopenSimple.csproj">
-      <Project>{2fb81add-258f-4135-a9b9-17e2aca2448e}</Project>
-      <Name>libCanopenSimple</Name>
-    </ProjectReference>
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>copy $(SolutionDir)\canfestival\$(ConfigurationName)\*.dll $(ProjectDir)\$(OutDir)</PostBuildEvent>

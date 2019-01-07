@@ -49,6 +49,7 @@ namespace libCanopenSimple
         public UInt16 cob;
         public byte len;
         public byte[] data;
+        public bool bridge = false;
 
         public canpacket()
         {
@@ -58,11 +59,12 @@ namespace libCanopenSimple
         /// Construct C# Canpacket from a CanFestival message
         /// </summary>
         /// <param name="msg">A CanFestival message struct</param>
-        public canpacket(DriverInstance.Message msg)
+        public canpacket(DriverInstance.Message msg,bool bridge=false)
         {
             cob = msg.cob_id;
             len = msg.len;
             data = new byte[len];
+            this.bridge = bridge;
 
             byte[] temp = BitConverter.GetBytes(msg.data);
             Array.Copy(temp, data, msg.len);
@@ -113,9 +115,9 @@ namespace libCanopenSimple
     public class libCanopenSimple
     {
 
+      
         public debuglevel dbglevel = debuglevel.DEBUG_NONE;
-        public bool echo = true;
-
+       
         DriverInstance driver;
 
         Dictionary<UInt16, NMTState> nmtstate = new Dictionary<ushort, NMTState>();
@@ -123,6 +125,8 @@ namespace libCanopenSimple
         private Queue<SDO> sdo_queue = new Queue<SDO>();
 
         DriverLoader loader = new DriverLoader();
+
+        public bool echo = true;
 
         public libCanopenSimple()
         {
@@ -155,6 +159,8 @@ namespace libCanopenSimple
             Thread thread = new Thread(new ThreadStart(asyncprocess));
             thread.Name = "CAN Open worker";
             thread.Start();
+
+            if (connectionevent != null) connectionevent(this, new ConnectionChangedEventArgs(true));
 
         }
 
@@ -189,7 +195,7 @@ namespace libCanopenSimple
         /// Send a Can packet on the bus
         /// </summary>
         /// <param name="p"></param>
-        public void SendPacket(canpacket p)
+        public void SendPacket(canpacket p, bool bridge=false)
         {
             DriverInstance.Message msg = p.ToMsg();
 
@@ -197,7 +203,7 @@ namespace libCanopenSimple
 
             if (echo == true)
             {
-                Driver_rxmessage(msg);
+                Driver_rxmessage(msg,bridge);
             }
         }
 
@@ -205,9 +211,9 @@ namespace libCanopenSimple
         /// Recieved message callback handler
         /// </summary>
         /// <param name="msg">CanOpen message recieved from the bus</param>
-        private void Driver_rxmessage(DriverInstance.Message msg)
+        private void Driver_rxmessage(DriverInstance.Message msg,bool bridge=false)
         {
-            packetqueue.Enqueue(new canpacket(msg));
+            packetqueue.Enqueue(new canpacket(msg,bridge));
         }
 
 
@@ -222,6 +228,8 @@ namespace libCanopenSimple
                 return;
 
             driver.close();
+
+            if (connectionevent != null) connectionevent(this, new ConnectionChangedEventArgs(false));
         }
 
         #endregion
@@ -229,6 +237,12 @@ namespace libCanopenSimple
         Dictionary<UInt16, Action<byte[]>> PDOcallbacks = new Dictionary<ushort, Action<byte[]>>();
         public Dictionary<UInt16, SDO> SDOcallbacks = new Dictionary<ushort, SDO>();
         ConcurrentQueue<canpacket> packetqueue = new ConcurrentQueue<canpacket>();
+
+        public delegate void ConnectionEvent(object sender, EventArgs e);
+        public event ConnectionEvent connectionevent;
+
+        public delegate void PacketEvent(canpacket p, DateTime dt);
+        public event PacketEvent packetevent;
 
         public delegate void SDOEvent(canpacket p, DateTime dt);
         public event SDOEvent sdoevent;
@@ -286,6 +300,13 @@ namespace libCanopenSimple
 
                 while (packetqueue.TryDequeue(out cp))
                 {
+
+                    if (cp.bridge == false)
+                    {
+                        if(packetevent!=null)
+                            packetevent(cp, DateTime.Now);
+                    }
+
                     //PDO 0x180 -- 0x57F
                     if (cp.cob >= 0x180 && cp.cob <= 0x57F)
                     {

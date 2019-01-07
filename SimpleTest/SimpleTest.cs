@@ -43,7 +43,7 @@ namespace SimpleTest
                 lco.pdoevent += Lco_pdoevent;
                 lco.sdoevent += Lco_sdoevent;
 
-                lco.open(4, bitrate, driver);
+                lco.open("com4", bitrate, driver);
 
                 Console.WriteLine("listening for any traffic");
 
@@ -71,23 +71,23 @@ namespace SimpleTest
 
         }
 
-        private static void Lco_nmtecevent(canpacket p)
+        private static void Lco_nmtecevent(canpacket p, DateTime dt)
         {
             Console.WriteLine("NMTEC :" + p.ToString());
         }
 
-        private static void Lco_sdoevent(libCanopenSimple.canpacket p)
+        private static void Lco_sdoevent(libCanopenSimple.canpacket p, DateTime dt)
         {
             Console.WriteLine("SDO :" + p.ToString());
         }
 
-        private static void Lco_pdoevent(libCanopenSimple.canpacket[] ps)
+        private static void Lco_pdoevent(libCanopenSimple.canpacket[] ps, DateTime dt)
         {
             foreach(canpacket p in ps)
                 Console.WriteLine("PDO :" + p.ToString());
         }
 
-        private static void Lco_nmtevent(libCanopenSimple.canpacket p)
+        private static void Lco_nmtevent(libCanopenSimple.canpacket p, DateTime dt)
         {
             Console.WriteLine("NMT :" + p.ToString());
         }

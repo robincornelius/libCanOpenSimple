@@ -41,6 +41,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ConnectionChangedEventArgs.cs" />
     <Compile Include="DriverLoader.cs" />
     <Compile Include="libCanopenSimple.cs" />
     <Compile Include="NMTState.cs" />

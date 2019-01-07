@@ -221,7 +221,7 @@ namespace libCanopenSimple
         /// CANOpen message recieved callback, this will be fired upon any recieved complete message on the bus
         /// </summary>
         /// <param name="msg">The CanOpen message</param>
-        public delegate void RxMessage(Message msg);
+        public delegate void RxMessage(Message msg,bool bridge=false);
         public event RxMessage rxmessage;
 
         /// <summary>
@@ -231,6 +231,7 @@ namespace libCanopenSimple
         [StructLayout(LayoutKind.Sequential, Size = 12, Pack = 1)]
         public struct Message
         {
+            public UInt16 cob_source_id; /**< message's ID */
             public UInt16 cob_id; /**< message's ID */
             public byte rtr;       /**< remote transmission request. (0 if not rtr message, 1 if rtr message) */
             public byte len;       /**< message's length (0 to 8) */
@@ -516,7 +517,7 @@ namespace libCanopenSimple
                             rxmessage(rxmsg);
                     }
 
-                    System.Threading.Thread.Sleep(1);
+                    System.Threading.Thread.Sleep(0);
                 }
             }
             catch
