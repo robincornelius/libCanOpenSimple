@@ -4,12 +4,13 @@
 *.exp
 *.lib
 *.log
-*.tlog
 *.db
 *.user
+*.tlog
 *.lastbuildstate
 /libCanopenSimple.VC.db
 Debug/
 Release/
 bin/
 .vs/
+*/Release/
