@@ -47,6 +47,7 @@ typedef unsigned long ULONG;
 FT_HANDLE ftHandle;
 FT_STATUS ftStatus;
 
+#define MAX_BUF_SIZE 20
 
 extern "C" {
 #include "can_driver.h"
@@ -451,7 +452,7 @@ extern "C"
 	} 
 
 typedef void (__stdcall *setStringValuesCB_t) (char *pStringValues[], int nValues);
-static setStringValuesCB_t gSetStringValuesCB;
+static setStringValuesCB_t __stdcall gSetStringValuesCB;
 
 void __stdcall NativeCallDelegate(char *pStringValues[], int nValues)
 {
@@ -470,10 +471,11 @@ extern "C" void __stdcall canEnumerate2_driver(setStringValuesCB_t callback)
 
 	for (DWORD x = 0; x < numDevs; x++)
 	{
-		char buf[20];
-		sprintf_s(buf, 20, "ftdi://%d/", x);
-		*(Values+x) = (char*)malloc(strlen(buf));
-		strcpy_s(*(Values+x),20,buf);
+		char buf[MAX_BUF_SIZE];
+		sprintf_s(buf, MAX_BUF_SIZE, "ftdi://%d/", x);
+		int len = 1+strnlen_s(buf, MAX_BUF_SIZE);
+		*(Values+x) = (char*)malloc(len);
+		strcpy_s(*(Values+x),len,buf);
 	}
 
 

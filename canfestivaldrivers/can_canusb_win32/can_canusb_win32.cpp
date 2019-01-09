@@ -24,6 +24,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 // LAWICEL AB CANUSB adapter (http://www.can232.com/)
 // driver for CanFestival-3 Win32 port
 
+#define MAX_BUF_SIZE 20
+
 #include <sstream>
 #include <iomanip>
 #if 0  // change to 1 if you use boost
@@ -463,7 +465,7 @@ bool can_canusbd2xx_win32::set_can_data(const Message& m, std::string& can_cmd)
 
 
 typedef void (__stdcall *setStringValuesCB_t) (char *pStringValues[], int nValues);
-static setStringValuesCB_t gSetStringValuesCB;
+static setStringValuesCB_t __stdcall gSetStringValuesCB;
 
 extern "C" void __stdcall NativeCallDelegate(char *pStringValues[], int nValues)
 {
@@ -488,10 +490,11 @@ extern "C" void __stdcall canEnumerate2_driver(setStringValuesCB_t callback)
 		int x = 0;
 		for (const auto& name : names)
 		{
-			char buf[20];
-			sprintf_s(buf,20, "%s",name.c_str());
-			*(Values + x) = (char*)malloc(strlen(buf));
-			strcpy_s(*(Values + x),20, buf);
+			char buf[MAX_BUF_SIZE];
+			sprintf_s(buf, MAX_BUF_SIZE, "%s",name.c_str());
+			int len = 1+strnlen_s(buf, MAX_BUF_SIZE);
+			*(Values + x) = (char*)malloc(len);
+			strcpy_s(*(Values + x),len, buf);
 
 			x++;
 

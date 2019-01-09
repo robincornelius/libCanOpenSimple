@@ -194,14 +194,19 @@ void __stdcall NativeCallDelegate(char *pStringValues[], int nValues)
 extern "C" void __stdcall canEnumerate2_driver(setStringValuesCB_t callback)
 {
 	
+	#define MAX_BUF_SIZE 20
+
 	DWORD numDevs = 1;
 	gSetStringValuesCB = callback;
 	char **Values = (char**)malloc(sizeof(void*)*numDevs);
 
-	char buf[20];
-	sprintf(buf, "ipc://can_id1");
-	*(Values) = (char*)malloc(strlen(buf));
-	strcpy(*(Values), buf);
+	char buf[MAX_BUF_SIZE];
+	sprintf_s(buf,MAX_BUF_SIZE, "ipc://can_id1");
+
+	int len = 1+ strnlen_s(buf, MAX_BUF_SIZE);
+
+	*(Values) = (char*)malloc(len);
+	strcpy_s(*(Values), len, buf);
 
 	NativeCallDelegate(Values, numDevs);
 }
