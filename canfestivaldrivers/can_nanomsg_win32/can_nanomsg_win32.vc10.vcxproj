@@ -51,6 +51,9 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir);$(ProjectDir)\..\win32;$(ProjectDir)\..\</IncludePath>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir);$(ProjectDir)\..\win32;$(ProjectDir)\..\</IncludePath>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
@@ -93,7 +96,7 @@
     </ClCompile>
     <Link>
       <OutputFile>$(SolutionDir)\bin\$(Configuration)\can_nanomsg_win32.dll</OutputFile>
-      <ModuleDefinitionFile>can_canusb_win32.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>can_nanomsg_win32.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
@@ -103,6 +106,7 @@
       </DataExecutionPrevention>
       <ImportLibrary>$(OutDir)can_nanomsg_win32.lib</ImportLibrary>
       <TargetMachine>MachineX86</TargetMachine>
+      <AdditionalDependencies>nanomsg.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /c /y $(ProjectDir)nanomsg.dll $(OutDir)..\</Command>
