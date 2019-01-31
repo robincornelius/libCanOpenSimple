@@ -309,6 +309,9 @@ bool can_canusbd2xx_win32::close_rs232()
    {
    if (m_port != INVALID_HANDLE_VALUE)
       {
+
+	   doTX("C\r");
+
       ::PurgeComm(m_port, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
       ::CloseHandle(m_port);
       m_port = INVALID_HANDLE_VALUE;
