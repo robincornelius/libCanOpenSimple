@@ -1,4 +1,4 @@
-# libCanopenSimple
+# libCanopenSiple
 libCanopenSimple is a "simple" canopen library for C# that uses native dll/so drivers from CanFestival to access CAN hardware. The library provides callbacks for the defined COB types NMT/PDO/SDO etc as well as allowing arbatary injection of CANOpen packets.
 The API also provides some common functions such as NMT controls for start/stop/reset and full SDO client behaviour so that remote nodes object dictionaries can be read/written via SDO using the library. The SDO supports expidited/segmented and block transfers.
 
@@ -13,18 +13,24 @@ Despite the above it would technicaly be possible to add all of the above featur
 ### Drivers
 
 libCanopenSimple uses the C API drivers from CanFestival. Can Festival is included as a git submodule in the project and the top level solution includes the C# libcanopensimple code and the canfestival drivers.
-Only 2 drivers are enabled these are
- - can_uvccm_win32
- - can_canusb-win32
-These drivers do not depend on any external installed files so will build out of the box, the ixxat,peak,copican and anagate drivers all require files supplied by the hardware manufacture 
+Only 4 drivers are enabled these are
+ - can_canusb_win32
+ - can_canusb_d2xx
+ - can_nanomsg_win32
+ - can_null_win32
 
+ canusb_win32 will enumerate any COM port and offer it as COMx, the protocol is CANTIN which is used by a number of devices including the ones from https://www.can232.com/?page_id=16
+ canusb_d2xx will enumerate any FTDI USB serial device using the ftdi d2xx driver. This means you don't need to enable legacy com port support for the ftdi device
+ nanomsg_win32 uses the nanomsg API to provide a local RPC system so that tests can be formed with for example CanOpenNode that also has a nanomsg driver
+ null_win32 is a driver template that has no functionaility other than it enumerates and stubs out the required functions.
+ 
 ### Create your own driver
 All drivers must confirm to the CanFestival driver API that is it must export the following symbols
    - canReceive_driver
    - canSend_driver
    - canOpen_driver
    - canClose_driver
-   - (new not part of canfestival) canEnumerate2_driver
+   - (new not part of original canfestival) canEnumerate2_driver
    - (optional) canChangeBaudRate_driver
    
   
