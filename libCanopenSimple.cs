@@ -394,6 +394,24 @@ namespace libCanopenSimple
 
                 SDO.kick_SDO();
 
+                lock (sdo_queue)
+                {
+                    foreach (SDO front in sdo_queue)
+                    {
+                        if (front != null)
+                        {
+                            if (!SDOcallbacks.ContainsKey((UInt16)(front.node + 0x580)))
+                            {
+                                //Listen for the reply on 0x580+node id
+                                SDOcallbacks.Add((UInt16)(front.node + 0x580), front);
+                                front.sendSDO();
+                            }
+                        }
+                    }
+                    sdo_queue.Clear();
+                }
+
+                /*
                 if (sdo_queue.Count > 0)
                 {
                     SDO front = sdo_queue.Peek();
@@ -410,7 +428,7 @@ namespace libCanopenSimple
                             }
                         }
                     }
-                }
+                }*/
 
                 //System.Threading.Thread.Sleep(1);
             }
@@ -570,7 +588,8 @@ namespace libCanopenSimple
         {
 
             SDO sdo = new SDO(this, node, index, subindex, SDO.direction.SDO_WRITE, completedcallback, data);
-            sdo_queue.Enqueue(sdo);
+            lock(sdo_queue)
+                sdo_queue.Enqueue(sdo);
             return sdo;
         }
 
@@ -585,7 +604,8 @@ namespace libCanopenSimple
         public SDO SDOread(byte node, UInt16 index, byte subindex, Action<SDO> completedcallback)
         {
             SDO sdo = new SDO(this, node, index, subindex, SDO.direction.SDO_READ, completedcallback, null);
-            sdo_queue.Enqueue(sdo);
+            lock (sdo_queue)
+                sdo_queue.Enqueue(sdo);
             return sdo;
         }
 
@@ -603,7 +623,8 @@ namespace libCanopenSimple
         /// </summary>
         public void flushSDOqueue()
         {
-            sdo_queue.Clear();
+            lock (sdo_queue)
+                sdo_queue.Clear();
         }
 
         #endregion
