@@ -323,16 +323,18 @@ namespace libCanopenSimple
                         if (cp.len != 8)
                             return;
 
-                        if (SDOcallbacks.ContainsKey(cp.cob))
+                        lock (sdo_queue)
                         {
-                            if (SDOcallbacks[cp.cob].SDOProcess(cp))
+                            if (SDOcallbacks.ContainsKey(cp.cob))
                             {
-                                SDOcallbacks.Remove(cp.cob);
+                                if (SDOcallbacks[cp.cob].SDOProcess(cp))
+                                {
+                                    SDOcallbacks.Remove(cp.cob);
+                                }
                             }
+                            if (sdoevent != null)
+                                sdoevent(cp, DateTime.Now);
                         }
-
-                        if (sdoevent != null)
-                            sdoevent(cp, DateTime.Now);
                     }
 
                     if (cp.cob >= 0x600 && cp.cob < 0x680)
@@ -402,6 +404,7 @@ namespace libCanopenSimple
                         {
                             if (!SDOcallbacks.ContainsKey((UInt16)(front.node + 0x580)))
                             {
+                                //Console.WriteLine($"$$$$ Adding to SDO queue {front.node:x2} - {front.index:x4}/{front.subindex:x2}");
                                 //Listen for the reply on 0x580+node id
                                 SDOcallbacks.Add((UInt16)(front.node + 0x580), front);
                                 front.sendSDO();
