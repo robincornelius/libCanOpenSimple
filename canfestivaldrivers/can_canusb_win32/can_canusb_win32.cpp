@@ -62,7 +62,7 @@ class can_canusbd2xx_win32
    private:
       bool open_rs232(std::string port ="COM1", int baud_rate = 57600);
       bool close_rs232();
-      bool get_can_data(const char* can_cmd_buf, long& bufsize, Message* m);
+      bool get_can_data(const char* can_cmd_buf, long& bufsize, Message* m, int & valid);
       bool set_can_data(const Message& m, std::string& can_cmd);
 	  bool can_canusbd2xx_win32::doTX(std::string can_cmd);
    private:
@@ -200,11 +200,20 @@ bool can_canusbd2xx_win32::receive(Message *m)
 	}
 
    long res_buffer_size = (long)m_residual_buffer.size();
-   bool result = get_can_data(m_residual_buffer.c_str(), res_buffer_size, m);
+   int valid;
+   bool result = get_can_data(m_residual_buffer.c_str(), res_buffer_size, m,valid);
+   
+   //FIXME BUFFER HACKING
+   if ((m_residual_buffer.size() > 500))
+   {
+	   m_residual_buffer.erase(0, m_residual_buffer.size());
+	   return true;
+   }
+
    if (result)
    {
-	  m_residual_buffer.erase(0, res_buffer_size);
-      return true;
+	  m_residual_buffer.erase(0, m_residual_buffer.size());
+      return valid;
    }
 
    enum { READ_TIMEOUT = 500 };
@@ -241,14 +250,22 @@ bool can_canusbd2xx_win32::receive(Message *m)
    result = true;
    if (bytes_read > 0)
       {
+
+	   for (int p = 0; p < bytes_read; p++)
+	   {
+		   if (buffer[p] == 0)
+			   buffer[p] = '\r';
+	   }
+
       m_residual_buffer.append(buffer, bytes_read);
       res_buffer_size = (long)m_residual_buffer.size();
-      result = get_can_data(m_residual_buffer.c_str(), res_buffer_size, m);
+      int valid;
+      result = get_can_data(m_residual_buffer.c_str(), res_buffer_size, m,valid);
       if (result)
          m_residual_buffer.erase(0, res_buffer_size);
       }
   // return result;
-   return true;
+   return valid;
    }
 
 bool can_canusbd2xx_win32::open_rs232(std::string port, int baud_rate)
@@ -293,7 +310,7 @@ bool can_canusbd2xx_win32::open_rs232(std::string port, int baud_rate)
    dcb.ByteSize = 8;
    dcb.Parity = NOPARITY;
    dcb.StopBits = ONESTOPBIT;
-   dcb.fAbortOnError = TRUE;
+   dcb.fAbortOnError = FALSE;
    dcb.EvtChar = 0x0A; // '\n' character
    ::SetCommState(m_port, &dcb);
 
@@ -324,6 +341,7 @@ bool can_canusbd2xx_win32::close_rs232()
    return true;
    }
 
+/*
 bool can_canusbd2xx_win32::get_can_data(const char* can_cmd_buf, long& bufsize, Message* m)
 {
 	if (bufsize < 5)
@@ -422,6 +440,183 @@ bool can_canusbd2xx_win32::get_can_data(const char* can_cmd_buf, long& bufsize, 
    *m = msg;
    return true;
    }
+   */
+
+bool can_canusbd2xx_win32::get_can_data(const char* can_cmd_buf, long& bufsize, Message* m, int& valid)
+{
+    valid = 0;
+
+    if (bufsize < 5)
+    {
+        bufsize = 0;
+        valid = false;
+        return false;
+    }
+
+    Message msg;
+    ::memset(&msg, 0, sizeof(msg));
+    char colon = 0, type = 0, request = 0;
+
+    //std::string meh = can_cmd_buf;
+
+    int length = strlen(can_cmd_buf);
+
+
+    int pos = 0;
+    int found = -1;
+    while (pos < length)
+    {
+        if (can_cmd_buf[pos] == 't')
+        {
+            found = pos;
+            break;
+        }
+        pos++;
+    }
+
+    if (found == -1)
+    {
+        return false;
+    }
+
+    if (found > 0)
+    {
+        bufsize = found;
+        valid = false;
+        return true;
+    }
+
+    //We must start at a t or its nonsense so above filters for this
+
+    type = can_cmd_buf[0];
+
+    char cob[4];
+    cob[0] = can_cmd_buf[1];
+    cob[1] = can_cmd_buf[2];
+    cob[2] = can_cmd_buf[3];
+    cob[3] = 0;
+
+    msg.cob_id = strtol(cob, NULL, 16);
+
+    char len[2];
+    len[0] = can_cmd_buf[4];
+    len[1] = 0;
+
+    msg.len = strtol(len, NULL, 16);
+
+    if (((msg.len * 2) + 5) > length)
+    {
+        //incomplete packet
+        bufsize = 0;
+        valid = false;
+        return false;
+    }
+
+
+    pos = 0;
+
+    if (type == 't')
+    {
+        msg.rtr = 0;
+        int databytecount = 0;
+        bool ispacketok = true;
+
+        pos = 5;
+
+        //for (pos = 0; pos < meh.length()-1; pos++)
+        while (pos < bufsize)
+        {
+
+            char data_byte_str[3];
+
+
+            data_byte_str[0] = can_cmd_buf[pos];
+
+            if (data_byte_str[0] == '\r')
+            {
+                if (databytecount == msg.len)
+                    ispacketok = true;
+                else
+                    ispacketok = false;
+
+                bufsize = pos;
+
+                break;
+            }
+
+
+
+            if (data_byte_str[0] == 't')
+            {
+                bufsize = pos;
+                ispacketok = false;
+                break;
+            }
+
+            pos++;
+
+            if (pos < bufsize && databytecount < msg.len)
+            {
+                data_byte_str[1] = can_cmd_buf[pos];
+                data_byte_str[2] = 0;
+
+
+                bool isbyteok = false;
+                if (data_byte_str[0] >= '0' && data_byte_str[0] <= '9')
+                    isbyteok = true;
+
+                if (data_byte_str[0] >= 'A' && data_byte_str[0] <= 'F')
+                    isbyteok = true;
+
+                if (data_byte_str[0] >= 'a' && data_byte_str[0] <= 'f')
+                    isbyteok = true;
+
+                if (isbyteok == false)
+                {
+                    bufsize = pos;
+                    ispacketok = false;
+                    break;
+                }
+
+                long byte_val;
+                byte_val = strtol(data_byte_str, NULL, 16);
+
+
+                msg.data[databytecount] = (UNS8)byte_val;
+                databytecount++;
+            }
+            pos++;
+        }
+
+
+        if (ispacketok == false)
+        {
+
+            return true;
+        }
+
+        if (pos < length)
+        {
+            char semicolon = can_cmd_buf[pos];
+            if (semicolon != '\r')
+            {
+                return true;
+            }
+        }
+
+    }
+    else
+    {
+        bufsize = 0;
+        return false;
+    }
+
+    bufsize = pos + 1;
+    valid = 1;
+
+    *m = msg;
+    return true;
+}
 
 bool can_canusbd2xx_win32::set_can_data(const Message& m, std::string& can_cmd)
    {

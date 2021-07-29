@@ -263,7 +263,8 @@ namespace libCanopenSimple
             if (dbglevel == debuglevel.DEBUG_ALL)
                 Console.WriteLine(String.Format("Sending a new SDO packet: {0}", p.ToString()));
 
-            can.SendPacket(p);
+            if(can.isopen())
+                can.SendPacket(p);
         }
 
         /// <summary>

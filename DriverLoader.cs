@@ -105,6 +105,7 @@ namespace libCanopenSimple
         {
 
             IntPtr Handle = LoadLibrary(fileName);
+
             if (Handle == IntPtr.Zero)
             {
                 int errorCode = Marshal.GetLastWin32Error();
@@ -490,10 +491,12 @@ namespace libCanopenSimple
         public void cansend(Message msg)
         {
 
+
             IntPtr msgptr = Marshal.AllocHGlobal(Marshal.SizeOf(msg));
             Marshal.StructureToPtr(msg, msgptr, false);
 
-            canSend(handle, msgptr);
+            if(handle!=null)
+               canSend(handle, msgptr);
 
             Marshal.FreeHGlobal(msgptr);
 
