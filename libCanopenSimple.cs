@@ -398,42 +398,18 @@ namespace libCanopenSimple
 
                 lock (sdo_queue)
                 {
-                    foreach (SDO front in sdo_queue)
+                    if (sdo_queue.Count > 0)
                     {
-                        if (front != null)
+                        SDO sdoobj = sdo_queue.Peek();
+
+                        if (!SDOcallbacks.ContainsKey((UInt16)(sdoobj.node + 0x580)))
                         {
-                            if (!SDOcallbacks.ContainsKey((UInt16)(front.node + 0x580)))
-                            {
-                                //Console.WriteLine($"$$$$ Adding to SDO queue {front.node:x2} - {front.index:x4}/{front.subindex:x2}");
-                                //Listen for the reply on 0x580+node id
-                                SDOcallbacks.Add((UInt16)(front.node + 0x580), front);
-                                front.sendSDO();
-                            }
+                            sdoobj = sdo_queue.Dequeue();
+                            SDOcallbacks.Add((UInt16)(sdoobj.node + 0x580), sdoobj);
+                            sdoobj.sendSDO();
                         }
                     }
-                    sdo_queue.Clear();
                 }
-
-                /*
-                if (sdo_queue.Count > 0)
-                {
-                    SDO front = sdo_queue.Peek();
-                    if (front != null)
-                    {
-                        if (!SDOcallbacks.ContainsKey((UInt16)(front.node + 0x580)))
-                        {
-                            if (sdo_queue.Count > 0)
-                            {
-                                front = sdo_queue.Dequeue();
-                                //Listen for the reply on 0x580+node id
-                                SDOcallbacks.Add((UInt16)(front.node + 0x580), front);
-                                front.sendSDO();
-                            }
-                        }
-                    }
-                }*/
-
-                //System.Threading.Thread.Sleep(1);
             }
         }
 
