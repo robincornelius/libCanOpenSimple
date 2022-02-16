@@ -63,6 +63,8 @@ namespace libCanopenSimple
         public UInt32 expitideddata;
         public bool expitided = false;
 
+        public int returnlen = 0;
+
         static List<SDO> activeSDO = new List<SDO>();
 
         private Action<SDO> completedcallback;
@@ -311,6 +313,9 @@ namespace libCanopenSimple
             int SCS = cp.data[0] >> 5; //7-5
 
             int n = (0x03 & (cp.data[0] >> 2)); //3-2 data size for normal packets
+
+            returnlen = 8*(4-n);
+
             int e = (0x01 & (cp.data[0] >> 1)); // expidited flag
             int s = (cp.data[0] & 0x01); // data size set flag
 
