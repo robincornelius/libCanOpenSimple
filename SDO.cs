@@ -476,9 +476,9 @@ namespace libCanopenSimple
 
             if (dir == direction.SDO_READ)
             {
-                byte cmd = 0x61;
+                byte cmd = 0x60;
                 if (toggle)
-                    cmd |= 0x10;
+                    cmd |= 0x70;
 
                 sendpacket(cmd, new byte[4]);
             }
