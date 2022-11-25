@@ -393,6 +393,9 @@ namespace libCanopenSimple
                     case BUSSPEED.BUS_500Kbit:
                         brd.baudrate = "500K";
                         break;
+                    case BUSSPEED.BUS_800Kbit:
+                        brd.baudrate = "800K";
+                        break;
                     case BUSSPEED.BUS_1Mbit:
                         brd.baudrate = "1M";
                         break;
