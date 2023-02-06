@@ -438,7 +438,7 @@ namespace libCanopenSimple
             if (SCS == 0x00)
             {
 
-                Console.WriteLine("RX Segmented transfer update length is {0} -- {1}", scount, totaldata);
+               // Console.WriteLine("RX Segmented transfer update length is {0} -- {1}", scount, totaldata);
 
                 for (int x = 0; x < scount; x++)
                 {
