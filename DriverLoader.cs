@@ -520,7 +520,7 @@ namespace libCanopenSimple
                             rxmessage(rxmsg);
                     }
 
-                    System.Threading.Thread.Sleep(0);
+                    //System.Threading.Thread.Sleep(0);
                 }
             }
             catch

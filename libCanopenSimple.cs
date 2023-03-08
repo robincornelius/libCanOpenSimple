@@ -295,7 +295,7 @@ namespace libCanopenSimple
 
                 while (threadrun && packetqueue.IsEmpty && pdos.Count==0 && sdo_queue.Count==0 && SDO.isEmpty())
                 {
-                    System.Threading.Thread.Sleep(1);
+                    System.Threading.Thread.Sleep(0);
                 }
 
                 while (packetqueue.TryDequeue(out cp))
