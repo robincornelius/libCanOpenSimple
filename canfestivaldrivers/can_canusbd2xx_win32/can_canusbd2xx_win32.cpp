@@ -1,5 +1,5 @@
 /*
-This file is part of CanFestival, a library implementing CanOpen Stack. 
+This file is part of CanFestival, a library implementing CanOpen Stack.
 
 CanFestival Copyright (C): Edouard TISSERANT and Francis DUPIN
 CanFestival Win32 port Copyright (C) 2007 Leonid Tochinski, ChattenAssociates, Inc.
@@ -35,7 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "atlbase.h"
 
-typedef void * PVOID;
+typedef void* PVOID;
 typedef unsigned long ULONG;
 #include "FTD2XX.H"
 
@@ -52,113 +52,113 @@ FT_STATUS ftStatus;
 extern "C" {
 #include "can_driver.h"
 }
-class can_canusbd2xx_win32
-   {
-   public:
-      class error
-        {
-        };
-	  can_canusbd2xx_win32(s_BOARD *board);
-	  ~can_canusbd2xx_win32();
-      bool send(const Message *m);
-      bool receive(Message *m);
-   private:
-      bool open_rs232(std::string port ="COM1", int baud_rate = 57600);
-      bool close_rs232();
-      bool get_can_data(const char* can_cmd_buf, long& bufsize, Message* m);
-      bool set_can_data(const Message& m, std::string& can_cmd);
-	  bool can_canusbd2xx_win32::doTX(std::string can_cmd);
-   private:
-      HANDLE m_port;
-      HANDLE m_read_event;
-      HANDLE m_write_event;
-      std::string m_residual_buffer;
-   };
+class can_canusbwin32
+{
+public:
+	class error
+	{
+	};
+	can_canusbwin32(s_BOARD* board);
+	~can_canusbwin32();
+	bool send(const Message* m);
+	bool receive(Message* m);
+private:
+	bool open_rs232(std::string port = "COM1", int baud_rate = 57600);
+	bool close_rs232();
+	bool get_can_data(const char* can_cmd_buf, long& bufsize, Message* m, int& valid);
+	bool set_can_data(const Message& m, std::string& can_cmd);
+	bool can_canusbwin32::doTX(std::string can_cmd);
+private:
+	HANDLE m_port;
+	HANDLE m_read_event;
+	HANDLE m_write_event;
+	std::string m_residual_buffer;
+};
 
-can_canusbd2xx_win32::can_canusbd2xx_win32(s_BOARD *board) : m_port(INVALID_HANDLE_VALUE),
-      m_read_event(0),
-      m_write_event(0)
-   {
-   if (!open_rs232(board->busname))
-      throw error();
+can_canusbwin32::can_canusbwin32(s_BOARD* board) : m_port(INVALID_HANDLE_VALUE),
+m_read_event(0),
+m_write_event(0)
+{
+	if (!open_rs232(board->busname))
+		throw error();
 
-   /*
-    S0 Setup 10Kbit
-	S1 Setup 20Kbit
-	S2 Setup 50Kbit
-	S3 Setup 100Kbit
-	S4 Setup 125Kbit
-	S5 Setup 250Kbit
-	S6 Setup 500Kbit
-	S7 Setup 800Kbit
-	S8 Setup 1Mbit
-   */
+	/*
+	 S0 Setup 10Kbit
+	 S1 Setup 20Kbit
+	 S2 Setup 50Kbit
+	 S3 Setup 100Kbit
+	 S4 Setup 125Kbit
+	 S5 Setup 250Kbit
+	 S6 Setup 500Kbit
+	 S7 Setup 800Kbit
+	 S8 Setup 1Mbit
+	*/
 
-   doTX("C\r");
+	doTX("C\r");
 
-   if (!strcmp(board->baudrate, "10K"))
-   {
-	   doTX("S0\r");
-   }
+	if (!strcmp(board->baudrate, "10K"))
+	{
+		doTX("S0\r");
+	}
 
-   if (!strcmp(board->baudrate, "20K"))
-   {
-	   doTX("S1\r");
-   }
+	if (!strcmp(board->baudrate, "20K"))
+	{
+		doTX("S1\r");
+	}
 
-   if (!strcmp(board->baudrate, "50K"))
-   {
-	   doTX("S2\r");
-   }
+	if (!strcmp(board->baudrate, "50K"))
+	{
+		doTX("S2\r");
+	}
 
-   if (!strcmp(board->baudrate, "100K"))
-   {
-	   doTX("S3\r");
-   }
+	if (!strcmp(board->baudrate, "100K"))
+	{
+		doTX("S3\r");
+	}
 
-   if (!strcmp(board->baudrate, "125K"))
-   {
-	   doTX("S4\r");
-   }
+	if (!strcmp(board->baudrate, "125K"))
+	{
+		doTX("S4\r");
+	}
 
-   if (!strcmp(board->baudrate, "250K"))
-   {
-	   doTX("S5\r");
-   }
+	if (!strcmp(board->baudrate, "250K"))
+	{
+		doTX("S5\r");
+	}
 
-   if (!strcmp(board->baudrate, "500K"))
-   {
-	   doTX("S6\r");
-   }
+	if (!strcmp(board->baudrate, "500K"))
+	{
+		doTX("S6\r");
+	}
 
-   if (!strcmp(board->baudrate, "800K"))
-   {
-	   doTX("S7\r");
-   }
+	if (!strcmp(board->baudrate, "800K"))
+	{
+		doTX("S7\r");
+	}
 
-   if (!strcmp(board->baudrate, "1M"))
-   {
-	   doTX("S8\r");
-   }
+	if (!strcmp(board->baudrate, "1M"))
+	{
+		doTX("S8\r");
+	}
 
-   doTX("O\r");
-
-
-   }
-
-can_canusbd2xx_win32::~can_canusbd2xx_win32()
-   {
-   close_rs232();
-   }
+	doTX("O\r");
 
 
-bool can_canusbd2xx_win32::doTX(std::string can_cmd)
+}
+
+can_canusbwin32::~can_canusbwin32()
+{
+	close_rs232();
+}
+
+
+bool can_canusbwin32::doTX(std::string can_cmd)
 {
 
 	unsigned long BytesWritten = 0;
 
 	ftStatus = FT_Write(ftHandle, (LPVOID)can_cmd.c_str(), can_cmd.length(), &BytesWritten);
-	if (ftStatus == FT_OK) 
+	if (ftStatus == FT_OK)
 	{
 		// FT_Write OK
 	}
@@ -172,27 +172,27 @@ bool can_canusbd2xx_win32::doTX(std::string can_cmd)
 
 }
 
-bool can_canusbd2xx_win32::send(const Message *m)
+bool can_canusbwin32::send(const Message* m)
 {
 
 
-   if (ftHandle == NULL)
-      return true;
+	if (ftHandle == NULL)
+		return true;
 
-   // build can_uvccm_win32 command string
-   std::string can_cmd;
-   set_can_data(*m, can_cmd);
+	// build can_uvccm_win32 command string
+	std::string can_cmd;
+	set_can_data(*m, can_cmd);
 
-   bool result = doTX(can_cmd);
+	bool result = doTX(can_cmd);
 
-   return false;
-   }
+	return false;
+}
 
 #define RX_BUF_SIZE 1024
 
-bool can_canusbd2xx_win32::receive(Message *m)
-   {
-	
+bool can_canusbwin32::receive(Message* m)
+{
+
 	DWORD EventDWord;
 	DWORD TxBytes;
 	DWORD RxBytes;
@@ -204,7 +204,8 @@ bool can_canusbd2xx_win32::receive(Message *m)
 	char RxBuffer[RX_BUF_SIZE];
 
 	long res_buffer_size = (long)m_residual_buffer.size();
-	bool result = get_can_data(m_residual_buffer.c_str(), res_buffer_size, m);
+	int valid = 0;
+	bool result = get_can_data(m_residual_buffer.c_str(), res_buffer_size, m,valid);
 
 	if (result)
 	{
@@ -215,15 +216,15 @@ bool can_canusbd2xx_win32::receive(Message *m)
 	FT_GetStatus(ftHandle, &RxBytes, &TxBytes, &EventDWord);
 
 	if (RxBytes > 0) {
-		ftStatus = FT_Read(ftHandle, RxBuffer, RxBytes< RX_BUF_SIZE ?RxBytes: RX_BUF_SIZE, &BytesReceived);
-		if (ftStatus == FT_OK) 
+		ftStatus = FT_Read(ftHandle, RxBuffer, RxBytes < RX_BUF_SIZE ? RxBytes : RX_BUF_SIZE, & BytesReceived);
+		if (ftStatus == FT_OK)
 		{
 
 			if (BytesReceived > 0)
 			{
 				m_residual_buffer.append(RxBuffer, BytesReceived);
 				res_buffer_size = (long)m_residual_buffer.size();
-				result = get_can_data(m_residual_buffer.c_str(), res_buffer_size, m);
+				result = get_can_data(m_residual_buffer.c_str(), res_buffer_size, m,valid);
 				if (result)
 					m_residual_buffer.erase(0, res_buffer_size);
 			}
@@ -234,11 +235,11 @@ bool can_canusbd2xx_win32::receive(Message *m)
 		}
 	}
 
-   return true;
-   }
+	return true;
+}
 
-bool can_canusbd2xx_win32::open_rs232(std::string port, int baud_rate)
-   {
+bool can_canusbwin32::open_rs232(std::string port, int baud_rate)
+{
 
 	int portno;
 	sscanf_s(port.c_str(), "ftdi://%d/", &portno);
@@ -248,7 +249,7 @@ bool can_canusbd2xx_win32::open_rs232(std::string port, int baud_rate)
 		// FT_Open OK, use ftHandle to access device
 
 		ftStatus = FT_SetBaudRate(ftHandle, 115200); // Set baud rate to 115200
-		ftStatus = FT_SetDataCharacteristics(ftHandle, FT_BITS_8, FT_STOP_BITS_1,FT_PARITY_NONE);
+		ftStatus = FT_SetDataCharacteristics(ftHandle, FT_BITS_8, FT_STOP_BITS_1, FT_PARITY_NONE);
 
 	}
 	else {
@@ -257,10 +258,10 @@ bool can_canusbd2xx_win32::open_rs232(std::string port, int baud_rate)
 	}
 
 	return true;
-  }
+}
 
-bool can_canusbd2xx_win32::close_rs232()
-   {
+bool can_canusbwin32::close_rs232()
+{
 
 	if (ftHandle != NULL)
 	{
@@ -268,13 +269,15 @@ bool can_canusbd2xx_win32::close_rs232()
 	}
 
 	return true;
-   }
+}
 
-bool can_canusbd2xx_win32::get_can_data(const char* can_cmd_buf, long& bufsize, Message* m)
+bool can_canusbwin32::get_can_data(const char* can_cmd_buf, long& bufsize, Message* m, int &valid)
 {
+
 	if (bufsize < 5)
 	{
 		bufsize = 0;
+		valid = 0;
 		return false;
 	}
 
@@ -282,179 +285,246 @@ bool can_canusbd2xx_win32::get_can_data(const char* can_cmd_buf, long& bufsize, 
 	::memset(&msg, 0, sizeof(msg));
 	char colon = 0, type = 0, request = 0;
 
-	std::string meh = can_cmd_buf;
+	int length = strlen(can_cmd_buf);
 
-	std::size_t found = meh.find_first_of('t');
+
+	int pos = 0;
+	int found = -1;
+	while (pos < length)
+	{
+		if (can_cmd_buf[pos] == 't')
+		{
+			found = pos;
+			break;
+		}
+		pos++;
+	}
 
 	if (found == -1)
 	{
-		return true;
+		return false;
 	}
 
 	if (found > 0)
 	{
 		bufsize = found;
+		valid = 0;
 		return true;
 	}
 
-   std::istringstream buf(std::string(can_cmd_buf),32);
+	//We must start at a t or its nonsense so above filters for this
 
-   std::string cob;
-   std::string len;
+	type = can_cmd_buf[0];
 
-   buf >> type >> std::setw(3) >> cob >> std::setw(1) >> len;
+	char cob[4];
+	cob[0] = can_cmd_buf[1];
+	cob[1] = can_cmd_buf[2];
+	cob[2] = can_cmd_buf[3];
+	cob[3] = 0;
 
-   buf.str();
+	msg.cob_id = (unsigned short)strtol(cob, NULL, 16);
+
+	char len[2];
+	len[0] = can_cmd_buf[4];
+	len[1] = 0;
+
+	msg.len = (unsigned char)strtol(len, NULL, 16);
+
+	if (((msg.len * 2) + 5) > length)
+	{
+		//incomplete packet
+		bufsize = 0;
+		return false;
+	}
+
+	pos = 0;
+
+	if (type == 't')
+	{
+		msg.rtr = 0;
+		int databytecount = 0;
+		bool ispacketok = true;
+
+		pos = 5;
+		while (pos < bufsize)
+		{
+
+			char data_byte_str[3];
 
 
-   if (type != 't')
-   {
-	   bufsize = 0;
-	   return false;
-   }
+			data_byte_str[0] = can_cmd_buf[pos];
+
+			if (data_byte_str[0] == '\r')
+			{
+				if (databytecount == msg.len)
+					ispacketok = true;
+				else
+					ispacketok = false;
+
+				bufsize = pos;
+
+				break;
+			}
 
 
 
-   msg.cob_id = std::stoi(cob, 0, 16);
-   msg.len = std::stoi(len, 0, 16);
+			if (data_byte_str[0] == 't')
+			{
+				bufsize = pos;
+				ispacketok = false;
+				break;
+			}
 
-   UNS8 pos;
+			pos++;
 
-   if (type == 't')
-      {
-      msg.rtr = 0;
-	  for (pos = 0; pos < msg.len; pos++)
-         {
-         std::string data_byte_str;
-         buf >> std::setw(2) >> data_byte_str;
+			if (pos < bufsize && databytecount < msg.len)
+			{
+				data_byte_str[1] = can_cmd_buf[pos];
+				data_byte_str[2] = 0;
 
-         if (data_byte_str[0] == '\r')
-            break;
-         long byte_val = -1;
-         std::istringstream(data_byte_str) >> std::hex >> byte_val;
-         if (byte_val == -1)
-            {
-            bufsize = 0;
-            return false;
-            }
-         msg.data[pos] = (UNS8)byte_val;
-         }
 
-      if (msg.len > 0)
-         {
-			
-		 char semicolon = buf.get();
-         if (semicolon != '\r')
-            {
-            bufsize = 0;
-            return false;
-            }
-         }
+				bool isbyteok = false;
+				if (data_byte_str[0] >= '0' && data_byte_str[0] <= '9')
+					isbyteok = true;
 
-      }
-   else if (type == 'r')
-      {
-      msg.rtr = 1;
-      buf >> msg.len;
-      }
-   else
-      {
-      bufsize = 0;
-      return false;
-      }
+				if (data_byte_str[0] >= 'A' && data_byte_str[0] <= 'F')
+					isbyteok = true;
 
-   bufsize = (long)buf.tellg();
+				if (data_byte_str[0] >= 'a' && data_byte_str[0] <= 'f')
+					isbyteok = true;
 
-   *m = msg;
-   return true;
-   }
+				if (isbyteok == false)
+				{
+					bufsize = pos;
+					ispacketok = false;
+					break;
+				}
 
-bool can_canusbd2xx_win32::set_can_data(const Message& m, std::string& can_cmd)
-   {
-   // build can_uvccm_win32 command string
-   std::ostringstream can_cmd_str;
+				long byte_val;
+				byte_val = strtol(data_byte_str, NULL, 16);
 
-   //Normal or RTR, note lowercase for standard can frames, upper case t/r for extended COB IDS
 
-   if (m.rtr == 1)
-   {
-	   can_cmd_str << 'r'; 
-   }
-   else
-   {
-	   can_cmd_str << 't';
-   }
+				msg.data[databytecount] = (UNS8)byte_val;
+				databytecount++;
+			}
+			pos++;
+		}
 
-   //COB next
 
-   can_cmd_str << std::hex << std::setfill('0') << std::setw(3) << m.cob_id;
+		if (ispacketok == false)
+		{
 
-   //LEN next
+			return true;
+		}
 
-   can_cmd_str << std::hex << std::setfill('0') << std::setw(1) << (UNS16)m.len;
+		if (pos < length)
+		{
+			char semicolon = can_cmd_buf[pos];
+			if (semicolon != '\r')
+			{
+				return true;
+			}
+		}
 
-   //DATA
+	}
+	else
+	{
+		bufsize = 0;
+		return false;
+	}
 
-   for (int i = 0; i < m.len; ++i)
-   {
-	   can_cmd_str << std::hex << std::setfill('0') << std::setw(2) << (long)m.data[i];
-   }
+	bufsize = pos + 1;
 
-   //Terminate
+	*m = msg;
+	return true;
+}
 
-   can_cmd_str << "\r";
+bool can_canusbwin32::set_can_data(const Message& m, std::string& can_cmd)
+{
+	// build can_uvccm_win32 command string
+	std::ostringstream can_cmd_str;
 
-   can_cmd = can_cmd_str.str();
+	//Normal or RTR, note lowercase for standard can frames, upper case t/r for extended COB IDS
 
-   OutputDebugString(can_cmd.c_str());
+	if (m.rtr == 1)
+	{
+		can_cmd_str << 'r';
+	}
+	else
+	{
+		can_cmd_str << 't';
+	}
 
-   return false;
-   }
+	//COB next
+
+	can_cmd_str << std::hex << std::setfill('0') << std::setw(3) << m.cob_id;
+
+	//LEN next
+
+	can_cmd_str << std::hex << std::setfill('0') << std::setw(1) << (UNS16)m.len;
+
+	//DATA
+
+	for (int i = 0; i < m.len; ++i)
+	{
+		can_cmd_str << std::hex << std::setfill('0') << std::setw(2) << (long)m.data[i];
+	}
+
+	//Terminate
+
+	can_cmd_str << "\r";
+
+	can_cmd = can_cmd_str.str();
+
+	OutputDebugString(can_cmd.c_str());
+
+	return false;
+}
 
 
 //------------------------------------------------------------------------
 extern "C"
-   UNS8 __stdcall canReceive_driver(CAN_HANDLE fd0, Message *m)
-   {
-	   return (UNS8)(!(reinterpret_cast<can_canusbd2xx_win32*>(fd0)->receive(m)));
-   }
+UNS8 __stdcall canReceive_driver(CAN_HANDLE fd0, Message * m)
+{
+	return (UNS8)(!(reinterpret_cast<can_canusbwin32*>(fd0)->receive(m)));
+}
 
 extern "C"
-   UNS8 __stdcall canSend_driver(CAN_HANDLE fd0, Message const *m)
-   {
-	   return (UNS8)reinterpret_cast<can_canusbd2xx_win32*>(fd0)->send(m);
-   }
+UNS8 __stdcall canSend_driver(CAN_HANDLE fd0, Message const* m)
+{
+	return (UNS8)reinterpret_cast<can_canusbwin32*>(fd0)->send(m);
+}
 
 extern "C"
-   CAN_HANDLE __stdcall canOpen_driver(s_BOARD *board)
-   {
-   try
-      {
-		  return (CAN_HANDLE) new can_canusbd2xx_win32(board);
-      }
-   catch (can_canusbd2xx_win32::error&)
-      {
-      return NULL;
-      }
-   }
-
-extern "C"
-   int __stdcall canClose_driver(CAN_HANDLE inst)
-   {
-	   delete reinterpret_cast<can_canusbd2xx_win32*>(inst);
-   return 1;
-   }
-
-extern "C"
-	UNS8 __stdcall canChangeBaudRate_driver( CAN_HANDLE fd, char* baud)
+CAN_HANDLE __stdcall canOpen_driver(s_BOARD * board)
+{
+	try
 	{
+		return (CAN_HANDLE) new can_canusbwin32(board);
+	}
+	catch (can_canusbwin32::error&)
+	{
+		return NULL;
+	}
+}
+
+extern "C"
+int __stdcall canClose_driver(CAN_HANDLE inst)
+{
+	delete reinterpret_cast<can_canusbwin32*>(inst);
+	return 1;
+}
+
+extern "C"
+UNS8 __stdcall canChangeBaudRate_driver(CAN_HANDLE fd, char* baud)
+{
 	return 0;
-	} 
+}
 
-typedef void (__stdcall *setStringValuesCB_t) (char *pStringValues[], int nValues);
-static setStringValuesCB_t __stdcall gSetStringValuesCB;
+typedef void(__stdcall* setStringValuesCB_t) (char* pStringValues[], int nValues);
+static setStringValuesCB_t gSetStringValuesCB;
 
-void __stdcall NativeCallDelegate(char *pStringValues[], int nValues)
+void __stdcall NativeCallDelegate(char* pStringValues[], int nValues)
 {
 	if (gSetStringValuesCB)
 		gSetStringValuesCB(pStringValues, nValues);
@@ -466,16 +536,16 @@ extern "C" void __stdcall canEnumerate2_driver(setStringValuesCB_t callback)
 	DWORD numDevs;
 	ftStatus = FT_ListDevices(&numDevs, NULL, FT_LIST_NUMBER_ONLY);
 
-    gSetStringValuesCB = callback;
-	char **Values = (char**)malloc(sizeof(void*)*numDevs);
+	gSetStringValuesCB = callback;
+	char** Values = (char**)malloc(sizeof(void*) * numDevs);
 
 	for (DWORD x = 0; x < numDevs; x++)
 	{
 		char buf[MAX_BUF_SIZE];
 		sprintf_s(buf, MAX_BUF_SIZE, "ftdi://%d/", x);
-		int len = 1+strnlen_s(buf, MAX_BUF_SIZE);
-		*(Values+x) = (char*)malloc(len);
-		strcpy_s(*(Values+x),len,buf);
+		int len = 1 + strnlen_s(buf, MAX_BUF_SIZE);
+		*(Values + x) = (char*)malloc(len);
+		strcpy_s(*(Values + x), len, buf);
 	}
 
 
