@@ -33,6 +33,8 @@ namespace libCanopenSimple
 
     public class DriverLoader
     {
+        DriverLoaderMono dlm;
+        DriverLoaderWin dlw;
         public static bool IsRunningOnMono()
         {
             return Type.GetType("Mono.Runtime") != null;
@@ -48,14 +50,14 @@ namespace libCanopenSimple
             if (IsRunningOnMono())
             {
                 fileName += ".so";
-                DriverLoaderMono dl = new DriverLoaderMono();
-                return dl.loaddriver(fileName);
+                dlm = new DriverLoaderMono();
+                return dlm.loaddriver(fileName);
             }
             else
             {
                 fileName += ".dll";
-                DriverLoaderWin dl = new DriverLoaderWin();
-                return dl.loaddriver(fileName);
+                dlw = new DriverLoaderWin();
+                return dlw.loaddriver(fileName);
             }
 
         }
@@ -339,6 +341,13 @@ namespace libCanopenSimple
 
         }
 
+        ~DriverInstance()
+        {
+          
+            handle = IntPtr.Zero;
+            brdptr = IntPtr.Zero;
+        }
+
         public static List<string> ports = new List<string>();
 
         public static void PrintReceivedData(string[] values, int valueCount)
@@ -488,17 +497,26 @@ namespace libCanopenSimple
         /// Send a CanOpen mesasge to the hardware device
         /// </summary>
         /// <param name="msg">CanOpen message to be sent</param>
-        public void cansend(Message msg)
+        public bool cansend(Message msg)
         {
+            try
+            {
+                bool ok = false;
 
+                IntPtr msgptr = Marshal.AllocHGlobal(Marshal.SizeOf(msg));
+                Marshal.StructureToPtr(msg, msgptr, false);
 
-            IntPtr msgptr = Marshal.AllocHGlobal(Marshal.SizeOf(msg));
-            Marshal.StructureToPtr(msg, msgptr, false);
+                if (handle != null)
+                    ok = canSend(handle, msgptr) != 0;
 
-            if(handle!=null)
-               canSend(handle, msgptr);
+                Marshal.FreeHGlobal(msgptr);
 
-            Marshal.FreeHGlobal(msgptr);
+                return ok;
+            }
+            catch(Exception e)
+            {
+                return false;
+            }
 
         }
 

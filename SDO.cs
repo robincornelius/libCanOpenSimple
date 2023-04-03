@@ -160,76 +160,83 @@ namespace libCanopenSimple
         /// </summary>
         private void kick_SDOp()
         {
-
-            if (state != SDO_STATE.SDO_INIT && DateTime.Now > timeout)
+            try
             {
-                state = SDO_STATE.SDO_ERROR;
 
-                Console.WriteLine("SDO Timeout Error on {0:x4}/{1:x2} {2:x8}", this.index, this.subindex, expitideddata);
-
-                if (completedcallback != null)
-                    completedcallback(this);
-
-                return;
-            }
-
-            if (state == SDO_STATE.SDO_INIT)
-            {
-                timeout = DateTime.Now + new TimeSpan(0, 0, 5);
-                state = SDO_STATE.SDO_SENT;
-
-                if (dir == direction.SDO_READ)
+                if (state != SDO_STATE.SDO_INIT && DateTime.Now > timeout)
                 {
-                    byte cmd = 0x40;
-                    byte[] payload = new byte[4];
-                    sendpacket(cmd, payload);
+                    state = SDO_STATE.SDO_ERROR;
+
+                    Console.WriteLine("SDO Timeout Error on {0:x4}/{1:x2} {2:x8}", this.index, this.subindex, expitideddata);
+
+                    if (completedcallback != null)
+                        completedcallback(this);
+
+                    return;
                 }
 
-                if (dir == direction.SDO_WRITE)
+                if (state == SDO_STATE.SDO_INIT)
                 {
-                    bool wpsent = false;
-                    byte cmd = 0;
+                    timeout = DateTime.Now + new TimeSpan(0, 0, 5);
+                    state = SDO_STATE.SDO_SENT;
 
-                    expitided = true;
-
-                    switch (databuffer.Length)
+                    if (dir == direction.SDO_READ)
                     {
-                        case 1:
-                            cmd = 0x2f;
-                            break;
-                        case 2:
-                            cmd = 0x2b;
-                            break;
-                        case 3:
-                            cmd = 0x27;
-                            break;
-                        case 4:
-                            cmd = 0x23;
-                            break;
-                        default:
-                            //Bigger than 4 bytes we use segmented transfer
-                            cmd = 0x21;
-                            expitided = false;
-
-                            byte[] payload = new byte[4];
-                            payload[0] = (byte)databuffer.Length;
-                            payload[1] = (byte)(databuffer.Length >> 8);
-                            payload[2] = (byte)(databuffer.Length >> 16);
-                            payload[3] = (byte)(databuffer.Length >> 24);
-
-                            expitideddata = (UInt32)databuffer.Length;
-                            totaldata = 0;
-
-                            wpsent = true;
-                            sendpacket(cmd, payload);
-                            break;
-
+                        byte cmd = 0x40;
+                        byte[] payload = new byte[4];
+                        sendpacket(cmd, payload);
                     }
 
-                    if (wpsent == false)
-                        sendpacket(cmd, databuffer);
+                    if (dir == direction.SDO_WRITE)
+                    {
+                        bool wpsent = false;
+                        byte cmd = 0;
 
+                        expitided = true;
+
+                        switch (databuffer.Length)
+                        {
+                            case 1:
+                                cmd = 0x2f;
+                                break;
+                            case 2:
+                                cmd = 0x2b;
+                                break;
+                            case 3:
+                                cmd = 0x27;
+                                break;
+                            case 4:
+                                cmd = 0x23;
+                                break;
+                            default:
+                                //Bigger than 4 bytes we use segmented transfer
+                                cmd = 0x21;
+                                expitided = false;
+
+                                byte[] payload = new byte[4];
+                                payload[0] = (byte)databuffer.Length;
+                                payload[1] = (byte)(databuffer.Length >> 8);
+                                payload[2] = (byte)(databuffer.Length >> 16);
+                                payload[3] = (byte)(databuffer.Length >> 24);
+
+                                expitideddata = (UInt32)databuffer.Length;
+                                totaldata = 0;
+
+                                wpsent = true;
+                                sendpacket(cmd, payload);
+                                break;
+
+                        }
+
+                        if (wpsent == false)
+                            sendpacket(cmd, databuffer);
+
+                    }
                 }
+            }
+            catch(Exception e)
+            {
+
             }
         }
 

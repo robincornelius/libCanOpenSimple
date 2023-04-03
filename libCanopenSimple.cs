@@ -138,6 +138,12 @@ namespace libCanopenSimple
             }
         }
 
+        ~libCanopenSimple()
+        {
+            Console.WriteLine("LibCanOpenSimple Destruction!!!!");
+
+        }
+
         #region driverinterface
 
         /// <summary>
@@ -195,16 +201,18 @@ namespace libCanopenSimple
         /// Send a Can packet on the bus
         /// </summary>
         /// <param name="p"></param>
-        public void SendPacket(canpacket p, bool bridge=false)
+        public bool SendPacket(canpacket p, bool bridge=false)
         {
-            DriverInstance.Message msg = p.ToMsg();
+             DriverInstance.Message msg = p.ToMsg();
 
-            driver.cansend(msg);
+            bool status = driver.cansend(msg);
 
             if (echo == true)
             {
                 Driver_rxmessage(msg,bridge);
             }
+
+            return status;
         }
 
         /// <summary>
@@ -664,7 +672,7 @@ namespace libCanopenSimple
             p.data[0] = 0x82;
             p.data[1] = nodeid;
 
-            SendPacket(p);
+             SendPacket(p);
         }
 
         public void NMT_SetStateTransitionCallback(byte node, Action<NMTState.e_NMTState> callback)

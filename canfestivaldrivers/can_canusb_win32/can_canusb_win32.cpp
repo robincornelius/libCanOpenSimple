@@ -154,20 +154,27 @@ can_canusbd2xx_win32::~can_canusbd2xx_win32()
 bool can_canusbd2xx_win32::doTX(std::string can_cmd)
 {
 
-	OVERLAPPED overlapped;
-	::memset(&overlapped, 0, sizeof overlapped);
-	overlapped.hEvent = m_write_event;
-	::ResetEvent(overlapped.hEvent);
+    //fprintf(stderr, "doTX\n");
 
-	unsigned long bytes_written = 0;
-	::WriteFile(m_port, can_cmd.c_str(), (unsigned long)can_cmd.length(), &bytes_written, &overlapped);
-	// wait for write operation completion
-	enum { WRITE_TIMEOUT = 1000 };
-	::WaitForSingleObject(overlapped.hEvent, WRITE_TIMEOUT);
-	// get number of bytes written
-	::GetOverlappedResult(m_port, &overlapped, &bytes_written, FALSE);
+    OVERLAPPED overlapped;
+    ::memset(&overlapped, 0, sizeof overlapped);
+    overlapped.hEvent = m_write_event;
+    ::ResetEvent(overlapped.hEvent);
 
-	bool result = (bytes_written == can_cmd.length());
+    unsigned long bytes_written = 0;
+    ::WriteFile(m_port, can_cmd.c_str(), (unsigned long)can_cmd.length(), &bytes_written, &overlapped);
+    // wait for write operation completion
+    enum { WRITE_TIMEOUT = 1000 };
+    ::WaitForSingleObject(overlapped.hEvent, WRITE_TIMEOUT);
+    // get number of bytes written
+    ::GetOverlappedResult(m_port, &overlapped, &bytes_written, FALSE);
+
+    bool result = (bytes_written == can_cmd.length());
+
+    if (bytes_written != can_cmd.length())
+    {
+        fprintf(stderr, "Tx done written %d requested %d\n", bytes_written, can_cmd.length());
+    }
 
 	return result;
 
@@ -175,8 +182,9 @@ bool can_canusbd2xx_win32::doTX(std::string can_cmd)
 
 bool can_canusbd2xx_win32::send(const Message *m)
    {
+   
    if (m_port == INVALID_HANDLE_VALUE)
-      return true;
+      return false;
 
    // build can_uvccm_win32 command string
    std::string can_cmd;
@@ -184,7 +192,7 @@ bool can_canusbd2xx_win32::send(const Message *m)
 
    bool result = doTX(can_cmd);
 
-   return false;
+   return result;
    }
 
 
@@ -718,12 +726,18 @@ extern "C" void __stdcall canEnumerate2_driver(setStringValuesCB_t callback)
 extern "C"
    UNS8 __stdcall canReceive_driver(CAN_HANDLE fd0, Message *m)
    {
+    if (fd0 == nullptr)
+        return 0;
+
 	   return (UNS8)(!(reinterpret_cast<can_canusbd2xx_win32*>(fd0)->receive(m)));
    }
 
 extern "C"
    UNS8 __stdcall canSend_driver(CAN_HANDLE fd0, Message const *m)
    {
+    if (fd0 == nullptr)
+        return 0;
+
 	   return (UNS8)reinterpret_cast<can_canusbd2xx_win32*>(fd0)->send(m);
    }
 
@@ -744,6 +758,8 @@ extern "C"
    int __stdcall canClose_driver(CAN_HANDLE inst)
    {
 	   delete reinterpret_cast<can_canusbd2xx_win32*>(inst);
+       inst = nullptr;
+
    return 1;
    }
 
