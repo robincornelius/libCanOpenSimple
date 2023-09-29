@@ -45,6 +45,8 @@ namespace libCanopenSimple
         /// <returns></returns>
         public DriverInstance loaddriver(string fileName)
         {
+          
+
             if (IsRunningOnMono())
             {
                 fileName += ".so";
@@ -53,6 +55,7 @@ namespace libCanopenSimple
             }
             else
             {
+              
                 fileName += ".dll";
                 DriverLoaderWin dl = new DriverLoaderWin();
                 return dl.loaddriver(fileName);
@@ -131,8 +134,6 @@ namespace libCanopenSimple
 
             funcaddr = GetProcAddress(Handle, "canEnumerate2_driver");
             DriverInstance.canEnumerate_T canEnumerate = Marshal.GetDelegateForFunctionPointer(funcaddr, typeof(DriverInstance.canEnumerate_T)) as DriverInstance.canEnumerate_T; ;
-
-            
 
             driver = new DriverInstance(canReceive, canSend, canOpen, canClose, canChangeBaudRate,canEnumerate);
 
@@ -307,7 +308,7 @@ namespace libCanopenSimple
         public delegate void canEnumerate_T(canEnumerateDelegate_T callback);
         private canEnumerate_T canEnumerate;
 
-        private IntPtr handle;
+        private IntPtr instancehandle = IntPtr.Zero;
         IntPtr brdptr;
 
         struct_s_BOARD brd;
@@ -334,7 +335,7 @@ namespace libCanopenSimple
 
             StringBuilder[] b = new StringBuilder[2];
 
-            handle = IntPtr.Zero;
+            instancehandle = IntPtr.Zero;
             brdptr = IntPtr.Zero;
 
         }
@@ -402,9 +403,9 @@ namespace libCanopenSimple
                 brdptr = Marshal.AllocHGlobal(Marshal.SizeOf(brd));
                 Marshal.StructureToPtr(brd, brdptr, false);
 
-                handle = canOpen(brdptr);
+                instancehandle = canOpen(brdptr);
 
-                if (handle != IntPtr.Zero)
+                if (instancehandle != IntPtr.Zero)
                 {
 
                     rxthread = new System.Threading.Thread(rxthreadworker);
@@ -428,7 +429,7 @@ namespace libCanopenSimple
         /// <returns>Open status of can device</returns>
         public bool isOpen()
         {
-            if (handle == IntPtr.Zero)
+            if (instancehandle == IntPtr.Zero)
                 return false;
 
 
@@ -450,10 +451,10 @@ namespace libCanopenSimple
                 System.Threading.Thread.Sleep(1);
             }
 
-            if (handle != IntPtr.Zero)
-                canClose(handle);
+            if (instancehandle != IntPtr.Zero)
+                canClose(instancehandle);
 
-            handle = IntPtr.Zero;
+            instancehandle = IntPtr.Zero;
 
             if (brdptr != IntPtr.Zero)
                 Marshal.FreeHGlobal(brdptr);
@@ -474,7 +475,7 @@ namespace libCanopenSimple
             IntPtr msgptr = Marshal.AllocHGlobal(Marshal.SizeOf(msg));
             Marshal.StructureToPtr(msg, msgptr, false);
 
-            byte status = canReceive(handle, msgptr);
+            byte status = canReceive(instancehandle, msgptr);
 
             msg = (Message)Marshal.PtrToStructure(msgptr, typeof(Message));
 
@@ -495,8 +496,8 @@ namespace libCanopenSimple
             IntPtr msgptr = Marshal.AllocHGlobal(Marshal.SizeOf(msg));
             Marshal.StructureToPtr(msg, msgptr, false);
 
-            if(handle!=null)
-               canSend(handle, msgptr);
+            if(instancehandle!=null)
+               canSend(instancehandle, msgptr);
 
             Marshal.FreeHGlobal(msgptr);
 
