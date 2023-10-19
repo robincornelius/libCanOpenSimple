@@ -139,7 +139,7 @@
       <DataExecutionPrevention>
       </DataExecutionPrevention>
       <ImportLibrary>$(OutDir)can_canusbd2xx_win32.lib</ImportLibrary>
-      <AdditionalDependencies>FTD2XX.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>FTD2XX64.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -190,7 +190,7 @@
       <DataExecutionPrevention>
       </DataExecutionPrevention>
       <ImportLibrary>$(OutDir)can_canusbd2xx_win32.lib</ImportLibrary>
-      <AdditionalDependencies>FTD2XX.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>FTD2XX64.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
