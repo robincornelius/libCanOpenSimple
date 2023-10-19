@@ -18,6 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
 namespace libCanopenSimple
 {
@@ -147,11 +148,12 @@ namespace libCanopenSimple
         /// <param name="comport">COM PORT number</param>
         /// <param name="speed">CAN Bit rate</param>
         /// <param name="drivername">Driver to use</param>
-        public void open(string comport, BUSSPEED speed, string drivername)
+        public bool open(string comport, BUSSPEED speed, string drivername)
         {
 
             driver = loader.loaddriver(drivername);
-            driver.open(string.Format("{0}", comport), speed);
+            if (driver.open(string.Format("{0}", comport), speed) == false)
+                return false;
 
             driver.rxmessage += Driver_rxmessage;
 
@@ -162,9 +164,12 @@ namespace libCanopenSimple
 
             if (connectionevent != null) connectionevent(this, new ConnectionChangedEventArgs(true));
 
+            return true;
+
         }
 
         public Dictionary<string, List<string>> ports = new Dictionary<string, List<string>>();
+        public Dictionary<string, DriverInstance> drivers = new Dictionary<string, DriverInstance>();
 
         public void enumerate(string drivername)
         {
@@ -172,9 +177,18 @@ namespace libCanopenSimple
             if (!ports.ContainsKey(drivername))
                 ports.Add(drivername, new List<string>());
 
-            driver = loader.loaddriver(drivername);
-            driver.enumerate();
 
+            //Keep a cache of open drivers or else if we try to close 
+            //on a hot plug event we have lost the handle and we will never close the port
+            if (!drivers.ContainsKey(drivername))
+            {
+                driver = loader.loaddriver(drivername);
+                drivers.Add(drivername, driver);
+            }
+
+            DriverInstance di = drivers[drivername];
+            
+            di.enumerate();
             ports[drivername] = DriverInstance.ports;
 
         }
