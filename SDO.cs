@@ -177,7 +177,7 @@ namespace libCanopenSimple
 
             if (state == SDO_STATE.SDO_INIT)
             {
-                timeout = DateTime.Now + new TimeSpan(0, 0, 5);
+                timeout = DateTime.Now + new TimeSpan(0, 0, 1);
                 state = SDO_STATE.SDO_SENT;
 
                 if (dir == direction.SDO_READ)
@@ -472,7 +472,7 @@ namespace libCanopenSimple
         private void requestNextSegment(bool toggle)
         {
 
-            timeout = DateTime.Now + new TimeSpan(0, 0, 5);
+            timeout = DateTime.Now + new TimeSpan(0, 0, 1);
 
             if (dir == direction.SDO_READ)
             {
