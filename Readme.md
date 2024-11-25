@@ -1,4 +1,4 @@
-# libCanopenSiple
+# libCanopenSimple
 libCanopenSimple is a "simple" canopen library for C# that uses native dll/so drivers from CanFestival to access CAN hardware. The library provides callbacks for the defined COB types NMT/PDO/SDO etc as well as allowing arbatary injection of CANOpen packets.
 The API also provides some common functions such as NMT controls for start/stop/reset and full SDO client behaviour so that remote nodes object dictionaries can be read/written via SDO using the library. The SDO supports expidited/segmented and block transfers.
 
