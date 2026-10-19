@@ -155,9 +155,15 @@ can_canusbwin32::~can_canusbwin32()
 bool can_canusbwin32::doTX(std::string can_cmd)
 {
 
+    // FT_Write accepts a DWORD count; reject an unrepresentable string rather
+    // than truncating it at the native API boundary.
+    if (can_cmd.size() > MAXDWORD)
+    {
+        return false;
+    }
 	unsigned long BytesWritten = 0;
 
-	ftStatus = FT_Write(ftHandle, (LPVOID)can_cmd.c_str(), can_cmd.length(), &BytesWritten);
+	ftStatus = FT_Write(ftHandle, (LPVOID)can_cmd.c_str(), static_cast<DWORD>(can_cmd.length()), &BytesWritten);
 	if (ftStatus == FT_OK)
 	{
 		// FT_Write OK
@@ -371,7 +377,7 @@ extern "C" void __stdcall canEnumerate2_driver(setStringValuesCB_t callback)
 	{
 		char buf[MAX_BUF_SIZE];
 		sprintf_s(buf, MAX_BUF_SIZE, "ftdi://%d/", x);
-		int len = 1 + strnlen_s(buf, MAX_BUF_SIZE);
+		size_t len = 1 + strnlen_s(buf, MAX_BUF_SIZE);
 		*(Values + x) = (char*)malloc(len);
 		strcpy_s(*(Values + x), len, buf);
 	}

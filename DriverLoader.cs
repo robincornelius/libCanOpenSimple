@@ -323,7 +323,6 @@ namespace libCanopenSimple
             }
         }
 
-        UnmanagedStruct enumerationresult;
 
         public delegate byte canReceive_T(IntPtr handle, IntPtr msg);
         private canReceive_T canReceive;

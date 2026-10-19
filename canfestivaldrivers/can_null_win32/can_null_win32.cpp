@@ -122,7 +122,7 @@ extern "C"
 	} 
 
 typedef void(__stdcall *setStringValuesCB_t) (char *pStringValues[], int nValues);
-static setStringValuesCB_t __stdcall gSetStringValuesCB;
+static setStringValuesCB_t gSetStringValuesCB;
 
 void __stdcall NativeCallDelegate(char *pStringValues[], int nValues)
 {
@@ -139,7 +139,7 @@ extern "C" void __stdcall canEnumerate2_driver(setStringValuesCB_t callback)
 
 	char buf[MAX_BUF_SIZE];
 	sprintf_s(buf, MAX_BUF_SIZE, "null://null1");
-	int len = 1+strnlen_s(buf, MAX_BUF_SIZE);
+	size_t len = 1+strnlen_s(buf, MAX_BUF_SIZE);
 	*(Values) = (char*)malloc(len);
 	strcpy_s(*(Values),len, buf);
 

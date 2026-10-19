@@ -21,6 +21,8 @@ License along with this library; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 
+#include <limits.h>
+
 // LAWICEL AB CANUSB adapter (http://www.can232.com/)
 // driver for CanFestival-3 Win32 port
 
@@ -438,6 +440,11 @@ extern "C" void __stdcall canEnumerate2_driver(setStringValuesCB_t callback)
 	if (CEnumerateSerial::UsingRegistry(names))
 	{
 
+        // The enumeration callback ABI uses a signed int count.
+        if (names.size() > INT_MAX)
+        {
+            return;
+        }
 		gSetStringValuesCB = callback;
 		char** Values = (char**)malloc(names.size()* MAX_BUF_SIZE*10);
 
@@ -446,7 +453,7 @@ extern "C" void __stdcall canEnumerate2_driver(setStringValuesCB_t callback)
 		{
 			char buf[MAX_BUF_SIZE];
 			sprintf_s(buf, MAX_BUF_SIZE, "%s", name.c_str());
-			int len = 1 + strnlen_s(buf, MAX_BUF_SIZE);
+			size_t len = 1 + strnlen_s(buf, MAX_BUF_SIZE);
 			*(Values + x) = (char*)malloc(len);
 			strcpy_s(*(Values + x), len, buf);
 
@@ -454,7 +461,7 @@ extern "C" void __stdcall canEnumerate2_driver(setStringValuesCB_t callback)
 
 		}
 
-		NativeCallDelegate(Values, names.size());
+		NativeCallDelegate(Values, static_cast<int>(names.size()));
 
 	}
 	else
