@@ -12,5 +12,6 @@
 Debug/
 Release/
 bin/
+obj/
 .vs/
 */Release/

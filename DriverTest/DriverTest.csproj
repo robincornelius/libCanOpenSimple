@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>DriverTest</RootNamespace>
     <AssemblyName>DriverTest</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
@@ -49,9 +49,50 @@
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\libCanopenSimple.csproj">
+      <Project>{2FB81ADD-258F-4135-A9B9-17E2ACA2448E}</Project>
+      <Name>libCanopenSimple</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\canfestivaldrivers\can_canusb_win32\can_canusb_win32.vc10.vcxproj">
+      <Project>{8B5C2DDC-C5EC-4776-8EEE-CAC2365987B8}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <SetPlatform Condition="'$(Platform)' != 'x64'">Platform=Win32</SetPlatform>
+      <SetPlatform Condition="'$(Platform)' == 'x64'">Platform=x64</SetPlatform>
+    </ProjectReference>
+  </ItemGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup>
+    <DriverOutputDir>$(SolutionDir)bin\$(Configuration)\drivers\</DriverOutputDir>
+    <DriverOutputDir Condition="'$(Platform)' == 'x64'">$(SolutionDir)bin\x64\$(Configuration)\drivers\</DriverOutputDir>
+  </PropertyGroup>
+  <!-- A rebuild in one solution must not clean another solution's deployment. -->
+  <PropertyGroup>
+    <IntermediateOutputPath>obj\$(SolutionName)\$(Platform)\$(Configuration)\</IntermediateOutputPath>
+  </PropertyGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>copy $(SolutionDir)\canfestival\$(ConfigurationName)\*.dll $(ProjectDir)\$(OutDir)</PostBuildEvent>
+    <PostBuildEvent>copy /y &quot;$(DriverOutputDir)can_canusb_win32.dll&quot; &quot;$(TargetDir)can_canusb_win32.dll&quot;</PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
