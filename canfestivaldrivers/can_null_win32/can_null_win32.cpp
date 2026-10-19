@@ -74,12 +74,13 @@ bool can_null_win32::send(const Message *m)
    }
 
 bool can_null_win32::receive(Message *m)
-   {
-
-	m->len = 0;
-	return true;
-   
-   }
+{
+    // A null bus never receives frames. Match the bounded idle polling used by
+    // the real drivers so the receive worker can sleep and still close promptly.
+    Sleep(10);
+    m->len = 0;
+    return true;
+}
 
 
 //------------------------------------------------------------------------
@@ -90,10 +91,11 @@ extern "C"
    }
 
 extern "C"
-   UNS8 __stdcall canSend_driver(CAN_HANDLE fd0, Message const *m)
-   {
-	   return (UNS8)reinterpret_cast<can_null_win32*>(fd0)->send(m);
-   }
+UNS8 __stdcall canSend_driver(CAN_HANDLE fd0, Message const *m)
+{
+    // CanFestival uses zero for successful send/receive operations.
+    return (UNS8)(!reinterpret_cast<can_null_win32*>(fd0)->send(m));
+}
 
 extern "C"
    CAN_HANDLE __stdcall canOpen_driver(s_BOARD *board)

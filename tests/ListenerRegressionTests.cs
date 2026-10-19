@@ -49,6 +49,7 @@ internal static class ListenerRegressionTests
         internal int MaxActive;
         internal int UnsafeClose;
         internal bool Block;
+        internal int EmptyReadDelay = 1;
 
         internal FakeDriver()
         {
@@ -101,7 +102,7 @@ internal static class ListenerRegressionTests
                 DriverInstance.Message message;
                 if (!Incoming.TryDequeue(out message))
                 {
-                    Thread.Sleep(1);
+                    Thread.Sleep(EmptyReadDelay);
                 }
                 Marshal.StructureToPtr(message, buffer, false);
                 return 0;
@@ -424,6 +425,102 @@ internal static class ListenerRegressionTests
         }
     }
 
+    private static void IdleProtocolCpu()
+    {
+        var fake = new FakeDriver { EmptyReadDelay = 20 };
+        var can = new Can();
+        Require(can.OpenDriver(fake.Driver, "fake", BUSSPEED.BUS_500Kbit), "Idle test open failed");
+        try
+        {
+            Thread.Sleep(200);
+            using (Process process = Process.GetCurrentProcess())
+            {
+                TimeSpan start = process.TotalProcessorTime;
+                Stopwatch wall = Stopwatch.StartNew();
+                Thread.Sleep(1500);
+                double cpu = (process.TotalProcessorTime - start).TotalMilliseconds;
+                double percent = cpu / wall.Elapsed.TotalMilliseconds * 100;
+                Console.WriteLine("Idle protocol: {0:F2} ms CPU, {1:F2}% of one core", cpu, percent);
+                Require(percent < 20, "Idle asyncprocess consumes excessive CPU");
+            }
+            int received = 0;
+            can.pdoevent += (packets, time) => Interlocked.Add(ref received, packets.Length);
+            fake.Queue(0x181);
+            Await(() => Volatile.Read(ref received) == 1, "Idle sleep prevented later packet delivery");
+        }
+        finally
+        {
+            can.close();
+        }
+        Console.WriteLine("PASS #3: idle protocol CPU and delivery after an idle interval");
+    }
+
+    private static void NativeNull(string deploymentDirectory)
+    {
+        var can = new Can { echo = false };
+        int received = 0;
+        can.pdoevent += (packets, time) => Interlocked.Add(ref received, packets.Length);
+        string driver = Path.Combine(Path.GetFullPath(deploymentDirectory), "drivers", "can_null_win32");
+        for (int cycle = 0; cycle < 3; cycle++)
+        {
+            Require(can.open("null://null1", BUSSPEED.BUS_500Kbit, driver), "Native null open failed");
+            try
+            {
+                using (Process process = Process.GetCurrentProcess())
+                {
+                    Thread.Sleep(100);
+                    TimeSpan start = process.TotalProcessorTime;
+                    Stopwatch wall = Stopwatch.StartNew();
+                    Thread.Sleep(750);
+                    double percent = (process.TotalProcessorTime - start).TotalMilliseconds / wall.Elapsed.TotalMilliseconds * 100;
+                    Console.WriteLine("Null driver cycle {0}: {1:F2}% of one CPU core", cycle + 1, percent);
+                    Require(percent < 20, "Real native null driver busy-spins");
+                }
+                can.SendPacket(new canpacket { cob = 0x181, len = 1, data = new byte[] { 1 } });
+                Require(can.ListenerErrorCount == 0 && received == 0, "Null bus fabricated packets or reported send/receive failure");
+            }
+            finally
+            {
+                var closing = Stopwatch.StartNew();
+                can.close();
+                Require(closing.ElapsedMilliseconds < 1500, "Null idle receive prevents timely close");
+            }
+        }
+        Console.WriteLine("PASS: real native null idle CPU, send status, close and reopen");
+    }
+
+    private static void HardwareReadback(string deploymentDirectory)
+    {
+        // Opt-in only: no writes, NMT transitions or persistent configuration changes.
+        var can = new Can { echo = false };
+        string driver = Path.Combine(Path.GetFullPath(deploymentDirectory), "drivers", "can_canusbd2xx_win32");
+        can.enumerate(driver);
+        Require(can.ports[driver].Contains("ftdi://0/"), "FTDI adapter zero was not discovered");
+        for (int cycle = 0; cycle < 3; cycle++)
+        {
+            Require(can.open("ftdi://0/", BUSSPEED.BUS_500Kbit, driver), "Hardware FTDI open failed");
+            try
+            {
+                for (int read = 0; read < 5; read++)
+                {
+                    SDO transfer = can.SDOread(0x19, 0x1000, 0, null);
+                    Require(transfer.WaitOne(3000) && transfer.state == SDO.SDO_STATE.SDO_FINISHED,
+                        "Node 0x19 device-type read failed");
+                    Require(transfer.databuffer != null && transfer.databuffer.Length == 4, "Unexpected device-type payload");
+                    Console.WriteLine("FTDI cycle {0}, read {1}: node 0x19 0x1000:00 = 0x{2:X8}",
+                        cycle + 1, read + 1, BitConverter.ToUInt32(transfer.databuffer, 0));
+                }
+                Require(can.IsListenerRunning && can.ListenerErrorCount == 0 && can.ListenerRestartCount == 0,
+                    "Hardware listener stopped or reported an error/restart");
+            }
+            finally
+            {
+                can.close();
+            }
+        }
+        Console.WriteLine("PASS: FTDI 500 kbit/s, 15 node 0x19 reads and three connect/disconnect cycles");
+    }
+
     private static int Main(string[] args)
     {
         using (var deadline = new Timer(state =>
@@ -436,6 +533,7 @@ internal static class ListenerRegressionTests
             Trace.Listeners.Add(new BrokenTrace());
             try
             {
+                IdleProtocolCpu();
                 RawCallbacksAndRecovery();
                 Console.WriteLine("PASS: raw callbacks, diagnostics, restart, reopen and native status");
                 CloseWaitsForRead();
@@ -455,7 +553,12 @@ internal static class ListenerRegressionTests
                 if (args.Length == 2 && args[0] == "--native")
                 {
                     NativeNanomsg(args[1]);
+                    NativeNull(args[1]);
                     Console.WriteLine("PASS: native nanomsg idle, send status, close and rebind");
+                }
+                if (args.Length == 2 && args[0] == "--hardware")
+                {
+                    HardwareReadback(args[1]);
                 }
                 return 0;
             }

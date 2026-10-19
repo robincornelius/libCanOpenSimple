@@ -152,3 +152,39 @@ configuration if that precondition fails. It calls the same production API as
 the editor. Pass the deployment directory, driver name (without extension),
 port, bitrate, and node explicitly. Native FTDI port syntax is ftdi://0/.
 Never run hardware commands as part of the automated fake-driver test suite.
+
+Listener and driver regressions
+===============================
+
+Run ./tests/run-tests.ps1 from this repository to rebuild and exercise Debug and
+Release on x64 and x86. The suite uses simulated drivers unless an explicit
+integration option is passed to the resulting ListenerRegressionTests.exe.
+
+Issue #3: IdleProtocolCpu measures process CPU while the production protocol
+worker runs against a blocking simulated receive driver, then verifies that
+incoming traffic is still delivered. The regression allows up to 20% of one
+CPU core to avoid treating scheduler noise as a busy loop.
+
+Native parser, overlapped-I/O and null-driver regressions:
+
+  ./canfestivaldrivers/tests/run-tests.ps1
+
+The null-driver test executes production native source. It checks bounded idle
+waiting, no fabricated packets, and zero-success native send status. The native
+build also produces missing-runtime startup fixtures for CanMonitor tests.
+
+With a matching built application deployment, run the managed/native integration:
+
+  ./tests/build/x64/Debug/ListenerRegressionTests.exe --native C:/path/to/deployment
+
+This additionally exercises real nanomsg and null DLLs, including idle CPU,
+send status, shutdown and reopen. Repeat with Release and matching x86 outputs.
+
+Optional physical-hardware check, only when adapter zero is available and the
+connected device is node 0x19 at 500 kbit/s:
+
+  ./tests/build/x64/Debug/ListenerRegressionTests.exe --hardware C:/path/to/deployment
+
+This discovers the FTDI port, performs fifteen SDO reads of 0x1000:00 over three
+connect/disconnect cycles and checks listener health. It does not write device
+parameters or issue NMT transitions. Never run two hardware clients concurrently.
