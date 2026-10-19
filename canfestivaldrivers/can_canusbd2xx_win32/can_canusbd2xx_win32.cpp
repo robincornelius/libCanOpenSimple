@@ -1,4 +1,4 @@
-/*
+﻿/*
 This file is part of CanFestival, a library implementing CanOpen Stack.
 
 CanFestival Copyright (C): Edouard TISSERANT and Francis DUPIN
@@ -43,6 +43,7 @@ typedef unsigned long ULONG;
 #include <iostream>       // std::cout
 #include <string>         // std::string
 #include <cstddef>        // std::size_t
+#include "../canusb_ascii_parser.h"
 
 FT_HANDLE ftHandle;
 FT_STATUS ftStatus;
@@ -65,14 +66,13 @@ public:
 private:
 	bool open_rs232(std::string port = "COM1", int baud_rate = 57600);
 	bool close_rs232();
-	bool get_can_data(const char* can_cmd_buf, long& bufsize, Message* m, int& valid);
 	bool set_can_data(const Message& m, std::string& can_cmd);
 	bool can_canusbwin32::doTX(std::string can_cmd);
 private:
 	HANDLE m_port;
 	HANDLE m_read_event;
 	HANDLE m_write_event;
-	std::string m_residual_buffer;
+    CanUsbAsciiParser m_receiveParser;
 };
 
 can_canusbwin32::can_canusbwin32(s_BOARD* board) : m_port(INVALID_HANDLE_VALUE),
@@ -193,49 +193,44 @@ bool can_canusbwin32::send(const Message* m)
 bool can_canusbwin32::receive(Message* m)
 {
 
-	DWORD EventDWord;
-	DWORD TxBytes;
-	DWORD RxBytes;
-	DWORD BytesReceived;
+    DWORD EventDWord;
+    DWORD TxBytes;
+    DWORD RxBytes;
+    DWORD BytesReceived;
 
-	m->cob_id = 0;
-	m->len = 0;
+    m->cob_id = 0;
+    m->len = 0;
 
-	char RxBuffer[RX_BUF_SIZE];
+    char RxBuffer[RX_BUF_SIZE];
 
-	long res_buffer_size = (long)m_residual_buffer.size();
-	int valid = 0;
-	bool result = get_can_data(m_residual_buffer.c_str(), res_buffer_size, m,valid);
+    // Drain buffered frames before reading again; a transport read can contain a burst.
+    if (m_receiveParser.TryRead(*m))
+    {
+        return true;
+    }
 
-	if (result)
-	{
-		m_residual_buffer.erase(0, res_buffer_size);
-		return true;
-	}
+    FT_GetStatus(ftHandle, &RxBytes, &TxBytes, &EventDWord);
 
-	FT_GetStatus(ftHandle, &RxBytes, &TxBytes, &EventDWord);
+    if (RxBytes > 0)
+    {
+        ftStatus = FT_Read(ftHandle, RxBuffer, RxBytes < RX_BUF_SIZE ? RxBytes : RX_BUF_SIZE, &BytesReceived);
+        if (ftStatus == FT_OK)
+        {
 
-	if (RxBytes > 0) {
-		ftStatus = FT_Read(ftHandle, RxBuffer, RxBytes < RX_BUF_SIZE ? RxBytes : RX_BUF_SIZE, & BytesReceived);
-		if (ftStatus == FT_OK)
-		{
+            if (BytesReceived > 0)
+            {
+                m_receiveParser.Append(RxBuffer, BytesReceived);
+                m_receiveParser.TryRead(*m);
+            }
 
-			if (BytesReceived > 0)
-			{
-				m_residual_buffer.append(RxBuffer, BytesReceived);
-				res_buffer_size = (long)m_residual_buffer.size();
-				result = get_can_data(m_residual_buffer.c_str(), res_buffer_size, m,valid);
-				if (result)
-					m_residual_buffer.erase(0, res_buffer_size);
-			}
+        }
+        else
+        {
+            // FT_Read Failed
+        }
+    }
 
-		}
-		else {
-			// FT_Read Failed
-		}
-	}
-
-	return true;
+    return true;
 }
 
 bool can_canusbwin32::open_rs232(std::string port, int baud_rate)
@@ -266,176 +261,9 @@ bool can_canusbwin32::close_rs232()
 	if (ftHandle != NULL)
 	{
 		FT_Close(ftHandle);
+        m_receiveParser.Clear();
 	}
 
-	return true;
-}
-
-bool can_canusbwin32::get_can_data(const char* can_cmd_buf, long& bufsize, Message* m, int &valid)
-{
-
-	if (bufsize < 5)
-	{
-		bufsize = 0;
-		valid = 0;
-		return false;
-	}
-
-	Message msg;
-	::memset(&msg, 0, sizeof(msg));
-	char colon = 0, type = 0, request = 0;
-
-	int length = strlen(can_cmd_buf);
-
-
-	int pos = 0;
-	int found = -1;
-	while (pos < length)
-	{
-		if (can_cmd_buf[pos] == 't')
-		{
-			found = pos;
-			break;
-		}
-		pos++;
-	}
-
-	if (found == -1)
-	{
-		return false;
-	}
-
-	if (found > 0)
-	{
-		bufsize = found;
-		valid = 0;
-		return true;
-	}
-
-	//We must start at a t or its nonsense so above filters for this
-
-	type = can_cmd_buf[0];
-
-	char cob[4];
-	cob[0] = can_cmd_buf[1];
-	cob[1] = can_cmd_buf[2];
-	cob[2] = can_cmd_buf[3];
-	cob[3] = 0;
-
-	msg.cob_id = (unsigned short)strtol(cob, NULL, 16);
-
-	char len[2];
-	len[0] = can_cmd_buf[4];
-	len[1] = 0;
-
-	msg.len = (unsigned char)strtol(len, NULL, 16);
-
-	if (((msg.len * 2) + 5) > length)
-	{
-		//incomplete packet
-		bufsize = 0;
-		return false;
-	}
-
-	pos = 0;
-
-	if (type == 't')
-	{
-		msg.rtr = 0;
-		int databytecount = 0;
-		bool ispacketok = true;
-
-		pos = 5;
-		while (pos < bufsize)
-		{
-
-			char data_byte_str[3];
-
-
-			data_byte_str[0] = can_cmd_buf[pos];
-
-			if (data_byte_str[0] == '\r')
-			{
-				if (databytecount == msg.len)
-					ispacketok = true;
-				else
-					ispacketok = false;
-
-				bufsize = pos;
-
-				break;
-			}
-
-
-
-			if (data_byte_str[0] == 't')
-			{
-				bufsize = pos;
-				ispacketok = false;
-				break;
-			}
-
-			pos++;
-
-			if (pos < bufsize && databytecount < msg.len)
-			{
-				data_byte_str[1] = can_cmd_buf[pos];
-				data_byte_str[2] = 0;
-
-
-				bool isbyteok = false;
-				if (data_byte_str[0] >= '0' && data_byte_str[0] <= '9')
-					isbyteok = true;
-
-				if (data_byte_str[0] >= 'A' && data_byte_str[0] <= 'F')
-					isbyteok = true;
-
-				if (data_byte_str[0] >= 'a' && data_byte_str[0] <= 'f')
-					isbyteok = true;
-
-				if (isbyteok == false)
-				{
-					bufsize = pos;
-					ispacketok = false;
-					break;
-				}
-
-				long byte_val;
-				byte_val = strtol(data_byte_str, NULL, 16);
-
-
-				msg.data[databytecount] = (UNS8)byte_val;
-				databytecount++;
-			}
-			pos++;
-		}
-
-
-		if (ispacketok == false)
-		{
-
-			return true;
-		}
-
-		if (pos < length)
-		{
-			char semicolon = can_cmd_buf[pos];
-			if (semicolon != '\r')
-			{
-				return true;
-			}
-		}
-
-	}
-	else
-	{
-		bufsize = 0;
-		return false;
-	}
-
-	bufsize = pos + 1;
-
-	*m = msg;
 	return true;
 }
 

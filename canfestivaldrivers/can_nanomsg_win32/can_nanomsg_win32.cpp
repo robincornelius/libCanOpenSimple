@@ -1,4 +1,4 @@
-/*
+﻿/*
 This file is part of CanFestival, a library implementing CanOpen Stack. 
 
 CanFestival Copyright (C): Edouard TISSERANT and Francis DUPIN
@@ -65,83 +65,77 @@ class can_nanomsg_win32
 	  int fd;
    };
 
-can_nanomsg_win32::can_nanomsg_win32(s_BOARD *board) : m_port(INVALID_HANDLE_VALUE),
-      m_read_event(0),
-      m_write_event(0)
-   {
-
-	open_rs232(board->busname, 0);
-	
-   }
+can_nanomsg_win32::can_nanomsg_win32(s_BOARD* board) : m_port(INVALID_HANDLE_VALUE),
+    m_read_event(0),
+    m_write_event(0)
+{
+    if (!open_rs232(board->busname, 0))
+    {
+        throw error();
+    }
+}
 
 can_nanomsg_win32::~can_nanomsg_win32()
-   {
+{
+    close_rs232();
+}
 
-   }
+bool can_nanomsg_win32::send(const Message* m)
+{
+    if (nn_send(fd, m, sizeof(Message), 0) < 0)
+    {
+        fprintf(stderr, "nn_send: %s\n", nn_strerror(nn_errno()));
+        return true;
+    }
 
+    // CanFestival's exported send status is zero on success.
+    return false;
+}
 
+bool can_nanomsg_win32::receive(Message* m)
+{
+    const int count = nn_recv(fd, m, sizeof(Message), NN_DONTWAIT);
+    if (count < 0)
+    {
+        const int error = nn_errno();
+        m->len = 0;
+        // An empty nonblocking queue is idle, not a failed receive operation.
+        return error == EAGAIN;
+    }
 
-bool can_nanomsg_win32::send(const Message *m)
-   {
-		if (nn_send(fd, m, sizeof(Message), 0) < 0) {
-			fprintf(stderr, "nn_send: %s\n", nn_strerror(nn_errno()));
-			nn_close(fd);
-			return false;
-	}
+    if (count != sizeof(Message))
+    {
+        m->len = 0;
+        return false;
+    }
 
-		return true;
-   }
-
-bool can_nanomsg_win32::receive(Message *m)
-   {
-
-	int rc;
-	/*  Here we ask the library to allocate response buffer for us (NN_MSG). */
-
-	rc = nn_recv(fd, m, 14, NN_DONTWAIT);
-	//rc = nn_recv(fd, &m2, NN_MSG, 0);
-	if (rc < 0) {
-		m->len = 0;
-
-		if (m->cob_sender_id != 0) //we are 0 as we are not really the bus
-			nn_send(fd, m, 14, NN_DONTWAIT);
-
-		//fprintf(stderr, "nn_recv: %s\n", nn_strerror(nn_errno()));
-		//nn_close(fd);
-		return false;
-	}
-
-	//memcpy(m, m2, rc<12?rc:12);
-
-	return true;
-   }
+    return true;
+}
 
 bool can_nanomsg_win32::open_rs232(std::string port, int baud_rate)
-   {
+{
+    fd = nn_socket(AF_SP, NN_BUS);
+    if (fd < 0)
+    {
+        fprintf(stderr, "nn_socket: %s\n", nn_strerror(nn_errno()));
+        return false;
+    }
 
-	fd = nn_socket(AF_SP, NN_BUS);
-	if (fd < 0) {
-		fprintf(stderr, "nn_socket: %s\n", nn_strerror(nn_errno()));
-		return false;
-	}
+    if (nn_bind(fd, port.c_str()) < 0)
+    {
+        fprintf(stderr, "nn_bind: %s\n", nn_strerror(nn_errno()));
+        nn_close(fd);
+        return false;
+    }
 
-	if (nn_bind(fd, port.c_str()) < 0) {
-		fprintf(stderr, "nn_socket: %s\n", nn_strerror(nn_errno()));
-		nn_close(fd);
-		return false;
-	}
-
-	return true;
-  
-   }
+    return true;
+}
 
 bool can_nanomsg_win32::close_rs232()
-   {
-	nn_close(fd);
-	return true;
-   }
-
-
+{
+    nn_close(fd);
+    return true;
+}
 
 //------------------------------------------------------------------------
 extern "C"

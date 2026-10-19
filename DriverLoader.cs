@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 namespace libCanopenSimple
 {
@@ -216,8 +217,49 @@ namespace libCanopenSimple
     public class DriverInstance
     {
 
-        private bool threadrun = true;
-        System.Threading.Thread rxthread;
+        private volatile bool threadrun;
+        private readonly object lifecycle = new object();
+        private bool closing;
+        private bool opening;
+        private bool boardMarshalled;
+        private readonly ListenerDiagnostics diagnostics = new ListenerDiagnostics();
+        private readonly ListenerWorker listenerWorker;
+
+        /// <summary>Listener errors and watchdog restart notices. Handlers must not block.</summary>
+        public event EventHandler<ListenerDiagnosticEventArgs> ListenerDiagnostic
+        {
+            add { diagnostics.Reported += value; }
+            remove { diagnostics.Reported -= value; }
+        }
+
+        public ListenerDiagnosticEventArgs LastListenerError
+        {
+            get
+            {
+                return diagnostics.LastError;
+            }
+        }
+        public long ListenerErrorCount
+        {
+            get
+            {
+                return diagnostics.ErrorCount;
+            }
+        }
+        public bool IsListenerRunning
+        {
+            get
+            {
+                return listenerWorker.IsRunning;
+            }
+        }
+        public long ListenerRestartCount
+        {
+            get
+            {
+                return listenerWorker.RestartCount;
+            }
+        }
 
         /// <summary>
         /// CANOpen message recieved callback, this will be fired upon any recieved complete message on the bus
@@ -325,12 +367,14 @@ namespace libCanopenSimple
         /// <param name="canChangeBaudrate">pInvoked delegate for canChangeBaudrate functipn</param>
         public DriverInstance(canReceive_T canReceive, canSend_T canSend, canOpen_T canOpen, canClose_T canClose, canChangeBaudRate_T canChangeBaudrate, canEnumerate_T canEnumerate)
         {
+            diagnostics.Source = this;
             this.canReceive = canReceive;
             this.canSend = canSend;
             this.canOpen = canOpen;
             this.canClose = canClose;
             this.canChangeBaudrate = canChangeBaudrate;
             this.canEnumerate = canEnumerate;
+            listenerWorker = new ListenerWorker("CAN driver receive", rxthreadworker, diagnostics);
 
 
             StringBuilder[] b = new StringBuilder[2];
@@ -363,63 +407,49 @@ namespace libCanopenSimple
         /// <returns>True on succesful opening of device</returns>
         public bool open(string bus, BUSSPEED speed)
         {
-
-            try
+            lock (lifecycle)
             {
-
-
-                brd.busname = bus;
-
-                // Map BUSSPEED to CanFestival speed options
-                switch (speed)
-                {
-                    case BUSSPEED.BUS_10Kbit:
-                        brd.baudrate = "10K";
-                        break;
-                    case BUSSPEED.BUS_20Kbit:
-                        brd.baudrate = "20K";
-                        break;
-                    case BUSSPEED.BUS_50Kbit:
-                        brd.baudrate = "50K";
-                        break;
-                    case BUSSPEED.BUS_100Kbit:
-                        brd.baudrate = "100K";
-                        break;
-                    case BUSSPEED.BUS_125Kbit:
-                        brd.baudrate = "125K";
-                        break;
-                    case BUSSPEED.BUS_250Kbit:
-                        brd.baudrate = "250K";
-                        break;
-                    case BUSSPEED.BUS_500Kbit:
-                        brd.baudrate = "500K";
-                        break;
-                    case BUSSPEED.BUS_1Mbit:
-                        brd.baudrate = "1M";
-                        break;
-
-                }
-
-                brdptr = Marshal.AllocHGlobal(Marshal.SizeOf(brd));
-                Marshal.StructureToPtr(brd, brdptr, false);
-
-                instancehandle = canOpen(brdptr);
-
-                if (instancehandle != IntPtr.Zero)
-                {
-
-                    rxthread = new System.Threading.Thread(rxthreadworker);
-                    rxthread.Start();
-                    return true;
-                }
-                else
+                if (opening || closing || instancehandle != IntPtr.Zero || !listenerWorker.IsStopped)
                 {
                     return false;
                 }
-            }
-            catch (Exception)
-            {
-                return false;
+
+                opening = true;
+                try
+                {
+                    brd.busname = bus;
+                    string[] rates = { "10K", "20K", "50K", "100K", "125K", "250K", "500K", "800K", "1M" };
+                    if ((int)speed < 0 || (int)speed >= rates.Length)
+                    {
+                        throw new ArgumentOutOfRangeException("speed");
+                    }
+
+                    brd.baudrate = rates[(int)speed];
+                    brdptr = Marshal.AllocHGlobal(Marshal.SizeOf(brd));
+                    Marshal.StructureToPtr(brd, brdptr, false);
+                    boardMarshalled = true;
+                    instancehandle = canOpen(brdptr);
+                    if (instancehandle == IntPtr.Zero)
+                    {
+                        throw new InvalidOperationException("The CAN driver could not open the device.");
+                    }
+
+                    threadrun = true;
+                    listenerWorker.Start();
+                    return true;
+                }
+                catch (Exception error)
+                {
+                    listenerWorker.RequestStop();
+                    threadrun = false;
+                    ReleaseDriver();
+                    diagnostics.Report("CAN driver receive", "Open failed", error);
+                    return false;
+                }
+                finally
+                {
+                    opening = false;
+                }
             }
         }
 
@@ -429,37 +459,79 @@ namespace libCanopenSimple
         /// <returns>Open status of can device</returns>
         public bool isOpen()
         {
-            if (instancehandle == IntPtr.Zero)
-                return false;
-
-
-            return true;
+            lock (lifecycle)
+            {
+                return !closing && instancehandle != IntPtr.Zero && listenerWorker.IsRunning;
+            }
         }
 
-        /// <summary>
-        /// Close the CAN hardware device
-        /// </summary>
+        /// <summary>Stop and join the reader before destroying its native handle.</summary>
         public void close()
         {
-            threadrun = false;
-
-            System.Threading.Thread.Sleep(100);
-
-            if(rxthread!=null)
-            while(rxthread.ThreadState == System.Threading.ThreadState.Running)
+            lock (lifecycle)
             {
-                System.Threading.Thread.Sleep(1);
+                if (closing)
+                {
+                    return;
+                }
+
+                closing = true;
+                listenerWorker.RequestStop();
+                threadrun = false;
             }
 
-            if (instancehandle != IntPtr.Zero)
-                canClose(instancehandle);
+            try
+            {
+                listenerWorker.Stop();
+                lock (lifecycle)
+                {
+                    ReleaseDriver();
+                }
+            }
+            finally
+            {
+                lock (lifecycle)
+                {
+                    closing = false;
+                }
+            }
+        }
 
+        private void ReleaseDriver()
+        {
+            IntPtr handle = instancehandle;
             instancehandle = IntPtr.Zero;
+            Exception failure = null;
+            try
+            {
+                if (handle != IntPtr.Zero)
+                {
+                    canClose(handle);
+                }
+            }
+            catch (Exception error)
+            {
+                failure = error;
+            }
+            finally
+            {
+                if (brdptr != IntPtr.Zero)
+                {
+                    if (boardMarshalled)
+                    {
+                        Marshal.DestroyStructure(brdptr, typeof(struct_s_BOARD));
+                    }
 
-            if (brdptr != IntPtr.Zero)
-                Marshal.FreeHGlobal(brdptr);
+                    Marshal.FreeHGlobal(brdptr);
+                    brdptr = IntPtr.Zero;
+                    boardMarshalled = false;
+                }
+            }
 
-            brdptr = IntPtr.Zero;
+            if (failure != null)
+            {
+                diagnostics.Report("CAN driver receive", "Close failed", failure);
+            }
         }
 
         /// <summary>
@@ -468,65 +540,75 @@ namespace libCanopenSimple
         /// <returns></returns>
         public Message canreceive()
         {
-
-            // I think we can do better here and not allocated/deallocate to heap every pump loop
-            Message msg = new Message();
-
-            IntPtr msgptr = Marshal.AllocHGlobal(Marshal.SizeOf(msg));
-            Marshal.StructureToPtr(msg, msgptr, false);
-
-            byte status = canReceive(instancehandle, msgptr);
-
-            msg = (Message)Marshal.PtrToStructure(msgptr, typeof(Message));
-
-            Marshal.FreeHGlobal(msgptr);
-
-            return msg;
-
-        }
-
-        /// <summary>
-        /// Send a CanOpen mesasge to the hardware device
-        /// </summary>
-        /// <param name="msg">CanOpen message to be sent</param>
-        public void cansend(Message msg)
-        {
-
-
-            IntPtr msgptr = Marshal.AllocHGlobal(Marshal.SizeOf(msg));
-            Marshal.StructureToPtr(msg, msgptr, false);
-
-            if(instancehandle!=null)
-               canSend(instancehandle, msgptr);
-
-            Marshal.FreeHGlobal(msgptr);
-
-        }
-
-        /// <summary>
-        /// Private worker thread to keep the rxmessage() function pumped
-        /// </summary>
-        private void rxthreadworker()
-        {
+            Message message = new Message();
+            IntPtr buffer = Marshal.AllocHGlobal(Marshal.SizeOf(message));
             try
             {
-                while (threadrun)
+                Marshal.StructureToPtr(message, buffer, false);
+                byte status = canReceive(instancehandle, buffer);
+                if (status != 0)
                 {
+                    throw new InvalidOperationException("CAN receive failed with driver status " + status + ".");
+                }
 
-                    DriverInstance.Message rxmsg = canreceive();
+                message = (Message)Marshal.PtrToStructure(buffer, typeof(Message));
+                return message;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
 
-                    if (rxmsg.len != 0)
+        /// <summary>Send a packet; serialize sends with native handle destruction.</summary>
+        public void cansend(Message message)
+        {
+            lock (lifecycle)
+            {
+                if (closing || instancehandle == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("The CAN driver is closed.");
+                }
+
+                IntPtr buffer = Marshal.AllocHGlobal(Marshal.SizeOf(message));
+                try
+                {
+                    Marshal.StructureToPtr(message, buffer, false);
+                    byte status = canSend(instancehandle, buffer);
+                    if (status != 0)
                     {
-                        if (rxmessage != null)
-                            rxmessage(rxmsg);
+                        throw new InvalidOperationException("CAN send failed with driver status " + status + ".");
                     }
-
-                    //System.Threading.Thread.Sleep(0);
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(buffer);
                 }
             }
-            catch
-            {
+        }
 
+        private void rxthreadworker()
+        {
+            while (threadrun)
+            {
+                Message message = canreceive();
+                if (!threadrun)
+                {
+                    break;
+                }
+
+                if (message.len > 8)
+                {
+                    diagnostics.Report("CAN driver receive", "Invalid DLC",
+                        new FormatException("The driver returned a CAN payload longer than eight bytes."));
+                    continue;
+                }
+
+                if (message.len != 0)
+                {
+                    diagnostics.Invoke(rxmessage, callback => ((RxMessage)callback)(message),
+                        "CAN driver receive", "Receive subscriber failed");
+                }
             }
         }
     }

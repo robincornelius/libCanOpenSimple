@@ -206,6 +206,10 @@
     <OutDir>$(SolutionDir)bin\x64\$(Configuration)\drivers\</OutDir>
     <IntDir>$(ProjectDir)obj\$(SolutionName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
+  <ItemGroup>
+    <ClInclude Include="..\canusb_ascii_parser.h" />
+    <ClInclude Include="serial_overlapped.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

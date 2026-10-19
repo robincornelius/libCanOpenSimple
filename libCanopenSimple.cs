@@ -129,8 +129,53 @@ namespace libCanopenSimple
 
         public bool echo = true;
 
+        private readonly object lifecycle = new object();
+        private readonly ListenerDiagnostics diagnostics = new ListenerDiagnostics();
+        private readonly ListenerWorker listenerWorker;
+        private bool opening;
+        private bool closing;
+        private bool cancelOpening;
+
+        /// <summary>Protocol and transport failures and watchdog restart notices. Handlers must not block.</summary>
+        public event EventHandler<ListenerDiagnosticEventArgs> ListenerDiagnostic
+        {
+            add { diagnostics.Reported += value; }
+            remove { diagnostics.Reported -= value; }
+        }
+
+        public ListenerDiagnosticEventArgs LastListenerError
+        {
+            get
+            {
+                return diagnostics.LastError;
+            }
+        }
+        public long ListenerErrorCount
+        {
+            get
+            {
+                return diagnostics.ErrorCount;
+            }
+        }
+        public bool IsListenerRunning
+        {
+            get
+            {
+                return listenerWorker.IsRunning;
+            }
+        }
+        public long ListenerRestartCount
+        {
+            get
+            {
+                return listenerWorker.RestartCount;
+            }
+        }
+
         public libCanopenSimple()
         {
+            diagnostics.Source = this;
+            listenerWorker = new ListenerWorker("CANopen protocol", asyncprocess, diagnostics);
             //preallocate all NMT guards
             for (byte x = 0; x < 0x80; x++)
             {
@@ -150,22 +195,91 @@ namespace libCanopenSimple
         /// <param name="drivername">Driver to use</param>
         public bool open(string comport, BUSSPEED speed, string drivername)
         {
-
-            driver = loader.loaddriver(drivername);
-            if (driver.open(string.Format("{0}", comport), speed) == false)
+            try
+            {
+                return OpenDriver(loader.loaddriver(drivername), comport, speed);
+            }
+            catch (Exception error)
+            {
+                diagnostics.Report("CANopen protocol", "Load driver failed", error);
                 return false;
+            }
+        }
 
-            driver.rxmessage += Driver_rxmessage;
+        // Keeps lifecycle tests independent of DLL loading and real CAN hardware.
+        internal bool OpenDriver(DriverInstance candidate, string port, BUSSPEED speed)
+        {
+            if (candidate == null)
+            {
+                throw new ArgumentNullException("candidate");
+            }
 
-            threadrun = true;
-            Thread thread = new Thread(new ThreadStart(asyncprocess));
-            thread.Name = "CAN Open worker";
-            thread.Start();
+            lock (lifecycle)
+            {
+                if (opening || closing || threadrun || !listenerWorker.IsStopped)
+                {
+                    return false;
+                }
 
-            if (connectionevent != null) connectionevent(this, new ConnectionChangedEventArgs(true));
+                opening = true;
+                cancelOpening = false;
+                driver = candidate;
+            }
 
-            return true;
+            bool success = false;
+            candidate.rxmessage += Driver_rxmessage;
+            candidate.ListenerDiagnostic += DriverDiagnostic;
+            try
+            {
+                if (!candidate.open(port, speed))
+                {
+                    return false;
+                }
 
+                lock (lifecycle)
+                {
+                    if (cancelOpening)
+                    {
+                        return false;
+                    }
+
+                    threadrun = true;
+                    listenerWorker.Start();
+                    success = true;
+                }
+
+                diagnostics.Invoke(connectionevent, callback =>
+                    ((ConnectionEvent)callback)(this, new ConnectionChangedEventArgs(true)),
+                    "CANopen protocol", "Connection subscriber failed");
+                return true;
+            }
+            catch (Exception error)
+            {
+                diagnostics.Report("CANopen protocol", "Open failed", error);
+                return false;
+            }
+            finally
+            {
+                if (!success)
+                {
+                    listenerWorker.RequestStop();
+                    threadrun = false;
+                    listenerWorker.Stop();
+                    candidate.close();
+                    candidate.rxmessage -= Driver_rxmessage;
+                    candidate.ListenerDiagnostic -= DriverDiagnostic;
+                }
+
+                lock (lifecycle)
+                {
+                    opening = false;
+                }
+            }
+        }
+
+        private void DriverDiagnostic(object sender, ListenerDiagnosticEventArgs diagnostic)
+        {
+            diagnostics.Report(diagnostic.Listener, diagnostic.Operation, diagnostic.Exception, diagnostic.Kind, false);
         }
 
         public Dictionary<string, List<string>> ports = new Dictionary<string, List<string>>();
@@ -182,8 +296,8 @@ namespace libCanopenSimple
             //on a hot plug event we have lost the handle and we will never close the port
             if (!drivers.ContainsKey(drivername))
             {
-                driver = loader.loaddriver(drivername);
-                drivers.Add(drivername, driver);
+                DriverInstance enumeratedDriver = loader.loaddriver(drivername);
+                drivers.Add(drivername, enumeratedDriver);
             }
 
             DriverInstance di = drivers[drivername];
@@ -202,7 +316,7 @@ namespace libCanopenSimple
             if (driver == null)
                 return false;
 
-            return driver.isOpen();
+            return threadrun && listenerWorker.IsRunning && driver.isOpen();
         }
 
         /// <summary>
@@ -236,19 +350,52 @@ namespace libCanopenSimple
         /// </summary>
         public void close()
         {
-            threadrun = false;
+            DriverInstance stopping;
+            lock (lifecycle)
+            {
+                if (closing)
+                {
+                    return;
+                }
 
-            if (driver == null)
-                return;
+                closing = true;
+                cancelOpening = true;
+                listenerWorker.RequestStop();
+                threadrun = false;
+                stopping = driver;
+            }
 
-            driver.close();
+            try
+            {
+                listenerWorker.Stop();
+                if (stopping != null)
+                {
+                    stopping.close();
+                    stopping.rxmessage -= Driver_rxmessage;
+                    stopping.ListenerDiagnostic -= DriverDiagnostic;
+                }
 
-            if (connectionevent != null) connectionevent(this, new ConnectionChangedEventArgs(false));
+                canpacket discarded;
+                while (packetqueue.TryDequeue(out discarded))
+                {
+                }
+
+                diagnostics.Invoke(connectionevent, callback =>
+                    ((ConnectionEvent)callback)(this, new ConnectionChangedEventArgs(false)),
+                    "CANopen protocol", "Connection subscriber failed");
+            }
+            finally
+            {
+                lock (lifecycle)
+                {
+                    closing = false;
+                }
+            }
         }
 
         #endregion
 
-        Dictionary<UInt16, Action<byte[]>> PDOcallbacks = new Dictionary<ushort, Action<byte[]>>();
+        ConcurrentDictionary<UInt16, Action<byte[]>> PDOcallbacks = new ConcurrentDictionary<ushort, Action<byte[]>>();
         public Dictionary<UInt16, SDO> SDOcallbacks = new Dictionary<ushort, SDO>();
         ConcurrentQueue<canpacket> packetqueue = new ConcurrentQueue<canpacket>();
 
@@ -282,7 +429,7 @@ namespace libCanopenSimple
         public delegate void SYNCEvent(canpacket p, DateTime dt);
         public event SYNCEvent syncevent;
 
-        bool threadrun = true;
+        private volatile bool threadrun;
 
         /// <summary>
         /// Register a parser handler for a PDO, if a PDO is recieved with a matching COB this function will be called
@@ -304,129 +451,181 @@ namespace libCanopenSimple
         {
             while (threadrun)
             {
-                canpacket cp;
-                List<canpacket> pdos = new List<canpacket>();
-
-                while (threadrun && packetqueue.IsEmpty && pdos.Count==0 && sdo_queue.Count==0 && SDO.isEmpty())
+                var pdos = new List<canpacket>();
+                canpacket packet;
+                int processed = 0;
+                // Bound each batch so shutdown, SDO timeouts and PDO delivery
+                // still run when the input queue never becomes empty.
+                while (threadrun && processed++ < 512 && packetqueue.TryDequeue(out packet))
                 {
-                    System.Threading.Thread.Sleep(0);
-                }
-
-                while (packetqueue.TryDequeue(out cp))
-                {
-
-                    if (cp.bridge == false)
+                    try
                     {
-                        if(packetevent!=null)
-                            packetevent(cp, DateTime.Now);
+                        ProcessPacket(packet, pdos);
                     }
-
-                    //PDO 0x180 -- 0x57F
-                    if (cp.cob >= 0x180 && cp.cob <= 0x57F)
+                    catch (Exception error)
                     {
-
-                        if (PDOcallbacks.ContainsKey(cp.cob))
-                            PDOcallbacks[cp.cob](cp.data);
-
-                        pdos.Add(cp);
-                    }
-
-                    //SDO replies 0x601-0x67F
-                    if (cp.cob >= 0x580 && cp.cob < 0x600)
-                    {
-                        if (cp.len != 8)
-                            return;
-
-                        lock (sdo_queue)
-                        {
-                            if (SDOcallbacks.ContainsKey(cp.cob))
-                            {
-                                if (SDOcallbacks[cp.cob].SDOProcess(cp))
-                                {
-                                    SDOcallbacks.Remove(cp.cob);
-                                }
-                            }
-                            if (sdoevent != null)
-                                sdoevent(cp, DateTime.Now);
-                        }
-                    }
-
-                    if (cp.cob >= 0x600 && cp.cob < 0x680)
-                    {
-                        if (sdoevent != null)
-                            sdoevent(cp,DateTime.Now);
-                    }
-
-                    //NMT
-                    if (cp.cob > 0x700 && cp.cob <= 0x77f)
-                    {
-                        byte node = (byte)(cp.cob & 0x07F);
-
-                        nmtstate[node].changestate((NMTState.e_NMTState)cp.data[0]);
-                        nmtstate[node].lastping = DateTime.Now;
-
-                        if (nmtecevent != null)
-                            nmtecevent(cp, DateTime.Now);
-                    }
-
-                    if (cp.cob == 000)
-                    {
-
-                        if (nmtevent != null)
-                            nmtevent(cp, DateTime.Now);
-                    }
-                    if (cp.cob == 0x80)
-                    {
-                        if (syncevent != null)
-                            syncevent(cp, DateTime.Now);
-                    }
-
-                    if (cp.cob > 0x080 && cp.cob <= 0xFF)
-                    {
-                        if (emcyevent != null)
-                        {
-                            emcyevent(cp, DateTime.Now);
-                        }
-                    }
-
-                    if (cp.cob == 0x100)
-                    {
-                        if (timeevent != null)
-                            timeevent(cp, DateTime.Now);
-                    }
-
-                    if (cp.cob > 0x7E4 && cp.cob <= 0x7E5)
-                    {
-                        if (lssevent != null)
-                            lssevent(cp, DateTime.Now);
+                        diagnostics.Report("CANopen protocol", "Packet processing failed", error);
                     }
                 }
 
-                if (pdos.Count > 0)
+                if (!threadrun)
                 {
-                    if (pdoevent != null)
-                        pdoevent(pdos.ToArray(),DateTime.Now);
+                    break;
+                }
+
+                if (pdos.Count != 0)
+                {
+                    canpacket[] batch = pdos.ToArray();
+                    DateTime timestamp = DateTime.Now;
+                    diagnostics.Invoke(pdoevent, callback => ((PDOEvent)callback)(batch, timestamp),
+                        "CANopen protocol", "PDO batch subscriber failed");
+                }
+
+                if (!threadrun)
+                {
+                    break;
                 }
 
                 SDO.kick_SDO();
-
+                bool pending;
                 lock (sdo_queue)
                 {
-                    if (sdo_queue.Count > 0)
+                    pending = sdo_queue.Count != 0;
+                    if (pending)
                     {
-                        SDO sdoobj = sdo_queue.Peek();
-
-                        if (!SDOcallbacks.ContainsKey((UInt16)(sdoobj.node + 0x580)))
+                        SDO sdo = sdo_queue.Peek();
+                        UInt16 responseCob = (UInt16)(sdo.node + 0x580);
+                        if (!SDOcallbacks.ContainsKey(responseCob))
                         {
-                            sdoobj = sdo_queue.Dequeue();
-                            SDOcallbacks.Add((UInt16)(sdoobj.node + 0x580), sdoobj);
-                            sdoobj.sendSDO();
+                            sdo_queue.Dequeue();
+                            SDOcallbacks.Add(responseCob, sdo);
+                            sdo.sendSDO();
                         }
                     }
                 }
+
+                Thread.Sleep(packetqueue.IsEmpty && !pending && SDO.isEmpty() ? 10 : 1);
             }
         }
 
+        private void ProcessPacket(canpacket packet, List<canpacket> pdos)
+        {
+            if (packet == null || packet.data == null || packet.len > 8 || packet.data.Length != packet.len)
+            {
+                diagnostics.Report("CANopen protocol", "Invalid CAN packet",
+                    new FormatException("CAN length and payload must agree and contain at most eight bytes."));
+                return;
+            }
+
+            DateTime timestamp = DateTime.Now;
+            if (!packet.bridge)
+            {
+                diagnostics.Invoke(packetevent, callback => ((PacketEvent)callback)(packet, timestamp),
+                    "CANopen protocol", "Packet subscriber failed");
+            }
+
+            if (!threadrun)
+            {
+                return;
+            }
+
+            if (packet.cob >= 0x180 && packet.cob <= 0x57F)
+            {
+                Action<byte[]> handler;
+                if (PDOcallbacks.TryGetValue(packet.cob, out handler))
+                {
+                    diagnostics.Invoke(handler, callback => ((Action<byte[]>)callback)(packet.data),
+                        "CANopen protocol", "PDO handler failed");
+                }
+
+                pdos.Add(packet);
+            }
+
+            if (packet.cob >= 0x580 && packet.cob < 0x600)
+            {
+                if (packet.len != 8)
+                {
+                    // Reject this reply, not the entire protocol listener.
+                    diagnostics.Report("CANopen protocol", "Invalid SDO reply",
+                        new FormatException("An SDO reply must contain eight bytes."));
+                    return;
+                }
+
+                lock (sdo_queue)
+                {
+                    SDO transfer;
+                    if (SDOcallbacks.TryGetValue(packet.cob, out transfer) && transfer.SDOProcess(packet))
+                    {
+                        SDOcallbacks.Remove(packet.cob);
+                    }
+                }
+            }
+
+            if (packet.cob >= 0x580 && packet.cob < 0x680)
+            {
+                diagnostics.Invoke(sdoevent, callback => ((SDOEvent)callback)(packet, timestamp),
+                    "CANopen protocol", "SDO subscriber failed");
+            }
+
+            if (packet.cob > 0x700 && packet.cob <= 0x77F)
+            {
+                if (packet.len == 0)
+                {
+                    diagnostics.Report("CANopen protocol", "Invalid heartbeat",
+                        new FormatException("A heartbeat must contain a state byte."));
+                    return;
+                }
+
+                byte node = (byte)(packet.cob & 0x7F);
+                try
+                {
+                    nmtstate[node].changestate((NMTState.e_NMTState)packet.data[0]);
+                }
+                catch (Exception error)
+                {
+                    diagnostics.Report("CANopen protocol", "NMT state callback failed", error);
+                }
+
+                diagnostics.Invoke(nmtecevent, callback => ((NMTECEvent)callback)(packet, timestamp),
+                    "CANopen protocol", "Heartbeat subscriber failed");
+            }
+
+            if (packet.cob == 0)
+            {
+                diagnostics.Invoke(nmtevent, callback => ((NMTEvent)callback)(packet, timestamp),
+                    "CANopen protocol", "NMT subscriber failed");
+            }
+
+            if (packet.cob == 0x80)
+            {
+                diagnostics.Invoke(syncevent, callback => ((SYNCEvent)callback)(packet, timestamp),
+                    "CANopen protocol", "SYNC subscriber failed");
+            }
+
+            if (packet.cob > 0x80 && packet.cob <= 0xFF)
+            {
+                diagnostics.Invoke(emcyevent, callback => ((EMCYEvent)callback)(packet, timestamp),
+                    "CANopen protocol", "EMCY subscriber failed");
+            }
+
+            if (packet.cob == 0x100)
+            {
+                diagnostics.Invoke(timeevent, callback => ((TIMEEvent)callback)(packet, timestamp),
+                    "CANopen protocol", "TIME subscriber failed");
+            }
+
+            if (packet.cob > 0x7E4 && packet.cob <= 0x7E5)
+            {
+                diagnostics.Invoke(lssevent, callback => ((LSSEvent)callback)(packet, timestamp),
+                    "CANopen protocol", "LSS subscriber failed");
+            }
+        }
+
+        internal void InvokeSdoCallback(Action<SDO> callback, SDO transfer)
+        {
+            diagnostics.Invoke(callback, handler => ((Action<SDO>)handler)(transfer),
+                "CANopen protocol", "SDO completion callback failed");
+        }
 
         #region SDOHelpers
 

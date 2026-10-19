@@ -117,7 +117,10 @@ namespace libCanopenSimple
 
         public static bool isEmpty()
         {
-            return activeSDO.Count == 0;
+            lock (activeSDO)
+            {
+                return activeSDO.Count == 0;
+            }
         }
 
         /// <summary>
@@ -170,7 +173,9 @@ namespace libCanopenSimple
                 Console.WriteLine("SDO Timeout Error on {0:x4}/{1:x2} {2:x8}", this.index, this.subindex, expitideddata);
 
                 if (completedcallback != null)
-                    completedcallback(this);
+                {
+                    can.InvokeSdoCallback(completedcallback, this);
+                }
 
                 return;
             }
@@ -336,7 +341,9 @@ namespace libCanopenSimple
                 Console.WriteLine("SDO Error on {0:x4}/{1:x2} {2:x8}", this.index, this.subindex, expitideddata);
 
                 if (completedcallback != null)
-                    completedcallback(this);
+                {
+                    can.InvokeSdoCallback(completedcallback, this);
+                }
 
                 return true;
             }
@@ -372,7 +379,9 @@ namespace libCanopenSimple
                 state = SDO_STATE.SDO_FINISHED;
 
                 if (completedcallback != null)
-                    completedcallback(this);
+                {
+                    can.InvokeSdoCallback(completedcallback, this);
+                }
 
                 return true;
             }
@@ -389,7 +398,9 @@ namespace libCanopenSimple
                 {
                     state = SDO_STATE.SDO_FINISHED;
                     if (completedcallback != null)
-                        completedcallback(this);
+                    {
+                        can.InvokeSdoCallback(completedcallback, this);
+                    }
                 }
 
             }
@@ -406,11 +417,7 @@ namespace libCanopenSimple
 
                 if (completedcallback != null)
                 {
-                    try
-                    {
-                        completedcallback(this);
-                    }
-                    catch { }
+                    can.InvokeSdoCallback(completedcallback, this);
 
                 }
                 return true;
@@ -457,7 +464,9 @@ namespace libCanopenSimple
                 {
                     state = SDO_STATE.SDO_FINISHED;
                     if (completedcallback != null)
-                        completedcallback(this);
+                    {
+                        can.InvokeSdoCallback(completedcallback, this);
+                    }
                 }
 
             }
