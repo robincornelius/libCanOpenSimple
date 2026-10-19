@@ -87,3 +87,7 @@ Currently the drivers in this source tree will not compile, it would be required
 
 
 
+
+### PDO editor snapshots
+
+`PdoConfiguration.ReadAsync` reads a selected PDO communication record and its active mapping under the node's exclusive SDO admission lease. Reading does not send NMT commands or change device settings. Unsupported optional communication fields and an absent mapping record are reported in the snapshot; a missing COB-ID or a transport failure stops the read. The PDO regression tests cover snapshot values, unsupported fields, absent mappings, and the absence of NMT commands during inspection.

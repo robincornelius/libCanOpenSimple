@@ -189,6 +189,11 @@ internal static class PdoConfigurationTests
             ulong address = message.data & 0xFFFFFF00UL;
             if (command == 0x40)
             {
+                if (!device.Values.ContainsKey((index << 8) | sub))
+                {
+                    fake.Queue(0x581, 8, address | 0x80 | ((ulong)0x06090011 << 32));
+                    return;
+                }
                 byte[] data = device.Read(index, sub);
                 var padded = new byte[4];
                 Array.Copy(data, padded, data.Length);
@@ -223,6 +228,19 @@ internal static class PdoConfigurationTests
             Require(disabledHeartbeat.Wait(5000) && !disabledHeartbeat.Result.NmtStateConfirmed
                 && BitConverter.ToUInt16(device.Read(0x1800, 3), 0) == 300,
                 "Disabled heartbeat prevented configuration or was falsely reported as confirmed");
+            int commands = fake.Outgoing.Count(message => message.cob_id == 0);
+            var read = PdoConfiguration.ReadAsync(can, 1, 0x1800, new byte[] { 0, 1, 2, 3 });
+            Require(read.Wait(4000) && read.Result.Communication[3].Length == 2
+                && BitConverter.ToUInt16(read.Result.Communication[3], 0) == 300
+                && read.Result.Unavailable.ContainsKey(0) && read.Result.Unavailable.ContainsKey(2)
+                && read.Result.Mappings.SequenceEqual(new uint[] { 0x20000010 }),
+                "PDO snapshot lost widths, mappings or optional-field errors");
+            Require(fake.Outgoing.Count(message => message.cob_id == 0) == commands,
+                "Opening a PDO snapshot changed NMT state");
+            device.Values.Remove(0x1A00 << 8);
+            var unavailable = PdoConfiguration.ReadAsync(can, 1, 0x1800, new byte[] { 1, 3 });
+            Require(unavailable.Wait(4000) && unavailable.Result.MappingError != null && unavailable.Result.Mappings.Count == 0,
+                "Unavailable mapping prevented communication-parameter inspection");
         }
         finally
         {

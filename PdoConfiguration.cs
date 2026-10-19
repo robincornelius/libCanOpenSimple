@@ -54,6 +54,58 @@ namespace libCanopenSimple
             return (index >= 0x1600 && index <= 0x17FF) || (index >= 0x1A00 && index <= 0x1BFF);
         }
 
+        /// <summary>Reads PDO parameters without changing NMT or device settings.</summary>
+        public static Task<PdoConfigurationSnapshot> ReadAsync(libCanopenSimple can, byte node,
+            ushort communicationIndex, IEnumerable<byte> communicationSubindices)
+        {
+            if (can == null || node == 0 || node > 127 ||
+                !((communicationIndex >= 0x1400 && communicationIndex <= 0x15FF)
+                || (communicationIndex >= 0x1800 && communicationIndex <= 0x19FF)))
+            {
+                throw new ArgumentException("Select a node and PDO communication record.");
+            }
+            byte[] subindices = communicationSubindices.Concat(new byte[] { 1 }).Distinct().OrderBy(value => value).ToArray();
+            return Task.Run(() => can.WithExclusiveSdo(node, () =>
+            {
+                var io = new CanIo(can, node);
+                var communication = new Dictionary<byte, byte[]>();
+                var unavailable = new Dictionary<byte, string>();
+                foreach (byte subindex in subindices)
+                {
+                    byte[] data;
+                    string error;
+                    if (io.TryRead(communicationIndex, subindex, out data, out error))
+                    {
+                        communication.Add(subindex, data);
+                    }
+                    else if (subindex == 1)
+                    {
+                        throw new InvalidOperationException("Cannot read PDO COB-ID: " + error);
+                    }
+                    else
+                    {
+                        unavailable.Add(subindex, error);
+                    }
+                }
+                ushort mapping = (ushort)(communicationIndex + 0x200);
+                var mappings = new List<uint>();
+                byte[] count;
+                string mappingError;
+                if (io.TryRead(mapping, 0, out count, out mappingError))
+                {
+                    if (count.Length != 1 || count[0] > 64)
+                    {
+                        throw new InvalidOperationException("Invalid classic-CAN PDO mapping count.");
+                    }
+                    for (int subindex = 1; subindex <= count[0]; subindex++)
+                    {
+                        mappings.Add(ReadU32(io, mapping, (byte)subindex));
+                    }
+                }
+                return new PdoConfigurationSnapshot(communicationIndex, communication, mappings, unavailable, mappingError);
+            }));
+        }
+
         /// <summary>
         /// Applies writes off the calling thread, holding exclusive SDO admission
         /// for this node. Confirms NMT state when heartbeat is configured;
@@ -243,6 +295,32 @@ namespace libCanopenSimple
             {
                 SDO transfer = can.SDOread(node, index, subindex, null);
                 Check(transfer);
+                return ReadData(transfer);
+            }
+
+            internal bool TryRead(ushort index, byte subindex, out byte[] data, out string error)
+            {
+                SDO transfer = can.SDOread(node, index, subindex, null);
+                if (!transfer.WaitOne(3500))
+                {
+                    transfer.SDOFinish();
+                    throw new TimeoutException("PDO parameter read did not complete.");
+                }
+                if (transfer.state == SDO.SDO_STATE.SDO_ERROR &&
+                    (transfer.expitideddata == 0x06020000 || transfer.expitideddata == 0x06090011 || transfer.expitideddata == 0x06010001))
+                {
+                    data = null;
+                    error = "Not readable/supported (0x" + transfer.expitideddata.ToString("X8") + ")";
+                    return false;
+                }
+                Check(transfer);
+                data = ReadData(transfer);
+                error = null;
+                return true;
+            }
+
+            private static byte[] ReadData(SDO transfer)
+            {
                 int length = transfer.expitided ? transfer.returnlen / 8 : transfer.databuffer.Length;
                 return transfer.databuffer.Take(length).ToArray();
             }
