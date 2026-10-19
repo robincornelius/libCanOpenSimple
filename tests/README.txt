@@ -67,3 +67,88 @@ Shutdown ordering regression: disable supervision before publishing the loop sto
 flag, then join before destroying native resources. Tests force the worker to exit
 before the join and exercise twenty rapid open/close cycles, checking that normal
 shutdown produces neither a failure diagnostic nor a watchdog restart.
+
+SDO concurrency and completion contract:
+- Requests are serialized per default SDO channel (node) on each connection.
+  Independent nodes can progress concurrently, preserving each node's FIFO order.
+- The protocol worker pumps only its own transfers. Replies with the wrong
+  object index/subindex or phase are ignored. Terminal transfers release only
+  their own registration, preventing old cleanup from removing a successor.
+- A transfer completes once: remove registration, signal WaitOne, then queue its
+  completion callback. Completion callbacks execute in order on a per-connection
+  ThreadPool dispatcher, outside SDO locks and independently of the listener.
+  They no longer execute on the protocol thread. Use BeginInvoke/Post for UI
+  work. WaitOne signals transfer completion, not callback completion. A callback
+  may enqueue and WaitOne on a subsequent transfer; it must not wait for that
+  transfer's callback, which is ordered behind it. Slow callbacks delay later
+  completion callbacks on that connection, but not protocol replies/timeouts.
+- WaitOne(int millisecondsTimeout) permits a bounded wait. The original WaitOne
+  remains available. Do not block a UI thread waiting for callback UI work.
+- A timeout finishes with SDO_ERROR and code 0x05040000. Queue flush cancels
+  pending requests only; close cancels active and pending requests. Both release
+  waiters and queue callbacks once with local error 0x08000000. Requests made
+  while the protocol is closed complete immediately with that local error.
+- Public SDOcallbacks is retained for compatibility; library access is internally
+  synchronized. Consumers must not mutate this implementation registry.
+- Default CANopen SDO has no transaction identifier. A delayed response for the
+  exact same object/direction can be indistinguishable from a new response;
+  these fixes cannot infer a missing wire-level transaction ID.
+
+Additional regressions use fake drivers, without hardware: overlapping reads and
+writes, blocked/reentrant callbacks, waiter-before-callback ordering, two
+connections with the same node, concurrent producers, old/double replies,
+timeout, queue flush, close/reopen, abort and segmented upload/download.
+
+PDO configuration API and protocol sequencing
+--------------------------------------------
+PdoConfiguration.ApplyAsync accepts a node and typed SdoParameterWrite entries.
+The OD Editor uses it for individual PDO edits and complete DCF batches. PDO
+communication ranges are 1400-15FF and 1800-19FF; mapping ranges are 1600-17FF
+and 1A00-1BFF. Mapping index minus 0200 selects its communication record.
+
+The sequence is targeted Pre-operational, snapshot/validate affected PDOs,
+set bit 31 of each current COB-ID, clear mapping counts for remapped PDOs,
+write requested parameters/mappings, restore the final mapping counts, restore
+final COB-IDs, then targeted Operational. Every download is acknowledged and
+read back before continuing. A requested COB-ID is first written with bit 31
+set. Other flags and intentionally disabled PDOs are preserved. Changes are
+not automatically stored through 1010h. On failure processing stops; no
+Operational command is sent after a failed parameter write. There is no blind
+rollback of a partially changed mapping. Inspect the failed step and device
+state before retrying.
+
+Active classic-CAN mapping descriptors are validated against the 64-bit payload
+budget. Partial edits preserve the current count unless a new count is supplied;
+untouched active descriptors are read for validation. Communication subindex 0
+and reserved communication fields are not treated as writable mapping counts.
+
+NMT state confirmation uses the configured heartbeat producer period at 1017:00.
+If nonzero, a missing target-state heartbeat stops configuration. If zero, the
+node-targeted NMT command is sent before following SDO traffic, with a 50 ms
+application-loop settling interval. The result explicitly reports the NMT state
+as unconfirmed. Heartbeat is not silently enabled. An SDO acknowledgement verifies
+an OD operation, not the remote NMT state. The OD Editor reports that distinction.
+This implementation requires readable 1017:00 and readable configuration entries
+for verification. DCF application selects readable/writable ParameterValue
+entries, not read-only metadata or write-only command objects.
+
+A per-node configuration lease holds ordinary SDO requests (including refresh)
+until the whole batch completes; other nodes continue. Each configuration SDO
+carries the lease identity, so no node-local interleaving can corrupt the mapping
+handshake. The lease is released even after an SDO abort or verification error.
+
+Sources checked:
+https://www.can-cia.org/can-knowledge/pdo-protocol
+https://www.can-cia.org/can-knowledge/network-management/
+https://www.can-cia.org/can-knowledge/error-control-protocols
+https://canopennode.github.io/CANopenNode/group__CO__PDO.html
+These public CiA descriptions document the mapping procedure and variable versus
+dynamic mapping. The full CiA 301 specification is not bundled with this project.
+
+PdoConfigurationTool.csproj is an explicit opt-in hardware diagnostic. With no
+arguments it only prints usage. inspect reads TPDO1 COB-ID/inhibit time and the
+heartbeat period. write-pdo requires an expected current value and performs no
+configuration if that precondition fails. It calls the same production API as
+the editor. Pass the deployment directory, driver name (without extension),
+port, bitrate, and node explicitly. Native FTDI port syntax is ftdi://0/.
+Never run hardware commands as part of the automated fake-driver test suite.

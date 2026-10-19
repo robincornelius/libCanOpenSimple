@@ -19,6 +19,8 @@
     <!-- Test the production sources directly without adding test-only public APIs. -->
     <Compile Include="..\*.cs" />
     <Compile Include="ListenerRegressionTests.cs" />
+    <Compile Include="SdoRegressionTests.cs" />
+    <Compile Include="PdoConfigurationTests.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

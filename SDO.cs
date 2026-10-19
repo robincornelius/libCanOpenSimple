@@ -68,6 +68,9 @@ namespace libCanopenSimple
         static List<SDO> activeSDO = new List<SDO>();
 
         private Action<SDO> completedcallback;
+        private readonly object transferSync = new object();
+        private int completionStarted;
+        internal object ConfigurationOwner;
       
       
         private direction dir;
@@ -112,7 +115,12 @@ namespace libCanopenSimple
         public void sendSDO()
         {
             lock (activeSDO)
-                activeSDO.Add(this);
+            {
+                if (Volatile.Read(ref completionStarted) == 0 && !activeSDO.Contains(this))
+                {
+                    activeSDO.Add(this);
+                }
+            }
         }
 
         public static bool isEmpty()
@@ -138,44 +146,57 @@ namespace libCanopenSimple
         /// </summary>
         public static void kick_SDO()
         {
-            List<SDO> tokill = new List<SDO>();
+            Pump(null);
+        }
 
+        internal static void kick_SDO(libCanopenSimple owner)
+        {
+            Pump(owner);
+        }
+
+        private static void Pump(libCanopenSimple owner)
+        {
+            SDO[] snapshot;
             lock (activeSDO)
             {
-                foreach (SDO s in activeSDO)
-                {
-                    s.kick_SDOp();
-                    if (s.state == SDO_STATE.SDO_FINISHED || s.state == SDO_STATE.SDO_ERROR)
-                    {
-                        tokill.Add(s);
-                    }
-                }
+                snapshot = activeSDO.FindAll(transfer => owner == null || transfer.can == owner).ToArray();
             }
-
-            foreach (SDO s in tokill)
+            foreach (SDO transfer in snapshot)
             {
-                lock (activeSDO)
-                    activeSDO.Remove(s);
-                s.SDOFinish();
+                transfer.kick_SDOp();
             }
+        }
+
+        private void kick_SDOp()
+        {
+            lock (transferSync)
+            {
+                if (Volatile.Read(ref completionStarted) != 0)
+                {
+                    return;
+                }
+                KickCore();
+            }
+            FinishIfTerminal();
         }
 
         /// <summary>
         /// State machine for a specific SDO instance
         /// </summary>
-        private void kick_SDOp()
+        private void KickCore()
         {
 
+            if (state == SDO_STATE.SDO_FINISHED || state == SDO_STATE.SDO_ERROR)
+            {
+                return;
+            }
             if (state != SDO_STATE.SDO_INIT && DateTime.Now > timeout)
             {
                 state = SDO_STATE.SDO_ERROR;
+                expitideddata = 0x05040000;
+                databuffer = BitConverter.GetBytes(expitideddata);
 
                 Console.WriteLine("SDO Timeout Error on {0:x4}/{1:x2} {2:x8}", this.index, this.subindex, expitideddata);
-
-                if (completedcallback != null)
-                {
-                    can.InvokeSdoCallback(completedcallback, this);
-                }
 
                 return;
             }
@@ -303,8 +324,51 @@ namespace libCanopenSimple
         /// </summary>
         public void SDOFinish()
         {
-            can.SDOcallbacks.Remove((UInt16)(this.node + 0x580));
+            Cancel(0x08000000);
+        }
+
+        internal void Cancel(uint abortCode)
+        {
+            lock (transferSync)
+            {
+                if (state != SDO_STATE.SDO_FINISHED && state != SDO_STATE.SDO_ERROR)
+                {
+                    state = SDO_STATE.SDO_ERROR;
+                    expitideddata = abortCode;
+                    databuffer = BitConverter.GetBytes(abortCode);
+                }
+            }
+            FinishIfTerminal();
+        }
+
+        private void FinishIfTerminal()
+        {
+            if (state != SDO_STATE.SDO_FINISHED && state != SDO_STATE.SDO_ERROR)
+            {
+                return;
+            }
+            if (Interlocked.Exchange(ref completionStarted, 1) != 0)
+            {
+                return;
+            }
+            // Release exactly this transfer before admitting its successor.
+            // A delayed cleanup must never remove a newer node registration.
+            can.ReleaseSdo(this);
+            lock (activeSDO)
+            {
+                activeSDO.Remove(this);
+            }
             finishedevent.Set();
+            if (completedcallback != null)
+            {
+                can.InvokeSdoCallback(completedcallback, this);
+            }
+        }
+
+        /// <summary>Wait for completion with a bounded timeout.</summary>
+        public bool WaitOne(int millisecondsTimeout)
+        {
+            return finishedevent.WaitOne(millisecondsTimeout);
         }
 
         /// <summary>
@@ -314,8 +378,44 @@ namespace libCanopenSimple
         /// <returns></returns>
         public bool SDOProcess(canpacket cp)
         {
+            bool terminal;
+            lock (transferSync)
+            {
+                if (Volatile.Read(ref completionStarted) != 0)
+                {
+                    return true;
+                }
+                ProcessCore(cp);
+                terminal = state == SDO_STATE.SDO_FINISHED || state == SDO_STATE.SDO_ERROR;
+            }
+            FinishIfTerminal();
+            return terminal;
+        }
+
+        private bool ProcessCore(canpacket cp)
+        {
 
             int SCS = cp.data[0] >> 5; //7-5
+            // Initiate replies and aborts identify the object. Segments do not.
+            // Ignore a delayed reply for a different object on the same channel.
+            if ((SCS == 2 || SCS == 3 || SCS == 4) &&
+                (cp.data[1] != (byte)index || cp.data[2] != (byte)(index >> 8) || cp.data[3] != subindex))
+            {
+                return false;
+            }
+            if (state == SDO_STATE.SDO_INIT || (dir == direction.SDO_READ && (SCS == 1 || SCS == 3))
+                || (dir == direction.SDO_WRITE && (SCS == 0 || SCS == 2)))
+            {
+                return false;
+            }
+            if ((SCS == 0 || SCS == 1) && state != SDO_STATE.SDO_HANDSHAKE)
+            {
+                return false;
+            }
+            if ((SCS == 2 || SCS == 3) && state != SDO_STATE.SDO_SENT)
+            {
+                return false;
+            }
 
             int n = (0x03 & (cp.data[0] >> 2)); //3-2 data size for normal packets
 
@@ -340,11 +440,6 @@ namespace libCanopenSimple
 
                 Console.WriteLine("SDO Error on {0:x4}/{1:x2} {2:x8}", this.index, this.subindex, expitideddata);
 
-                if (completedcallback != null)
-                {
-                    can.InvokeSdoCallback(completedcallback, this);
-                }
-
                 return true;
             }
 
@@ -353,35 +448,14 @@ namespace libCanopenSimple
             {
 
 
-                UInt16 index = (UInt16)(cp.data[1] + (cp.data[2] << 8));
-                byte sub = cp.data[3];
-
-                int node = cp.cob - 0x580;
-
-
-                foreach (SDO sdo in activeSDO)
+                if (!expitided)
                 {
-                    if (sdo.node == node)
-                    {
-                        if ((index == sdo.index && sub == sdo.subindex)) //if segments break its here
-                        {
-                            if (expitided == false)
-                            {
-                                state = SDO_STATE.SDO_HANDSHAKE;
-                                requestNextSegment(false);
-                                return false;
-                            }
-                        }
-
-                    }
+                    state = SDO_STATE.SDO_HANDSHAKE;
+                    requestNextSegment(false);
+                    return false;
                 }
 
                 state = SDO_STATE.SDO_FINISHED;
-
-                if (completedcallback != null)
-                {
-                    can.InvokeSdoCallback(completedcallback, this);
-                }
 
                 return true;
             }
@@ -397,10 +471,6 @@ namespace libCanopenSimple
                 else
                 {
                     state = SDO_STATE.SDO_FINISHED;
-                    if (completedcallback != null)
-                    {
-                        can.InvokeSdoCallback(completedcallback, this);
-                    }
                 }
 
             }
@@ -408,29 +478,26 @@ namespace libCanopenSimple
             //if expedited just handle the data
             if (SCS == 0x02 && e == 1)
             {
+                expitided = true;
                 //Expidited and length are set so its a regular short transfer
 
                 expitideddata = (UInt32)(cp.data[4] + (cp.data[5] << 8) + (cp.data[6] << 16) + (cp.data[7] << 24));
                 databuffer = BitConverter.GetBytes(expitideddata);
 
                 state = SDO_STATE.SDO_FINISHED;
-
-                if (completedcallback != null)
-                {
-                    can.InvokeSdoCallback(completedcallback, this);
-
-                }
                 return true;
             }
 
             if (SCS == 0x02)
             {
+                expitided = false;
                 UInt32 count = (UInt32)(cp.data[4] + (cp.data[5] << 8) + (cp.data[6] << 16) + (cp.data[7] << 24));
 
                 Console.WriteLine("RX Segmented transfer start length is {0}", count);
                 expitideddata = count;
                 databuffer = new byte[expitideddata];
                 totaldata = 0;
+                state = SDO_STATE.SDO_HANDSHAKE;
                 //Request next segment
 
                 requestNextSegment(false); //toggle off on first request
@@ -463,10 +530,6 @@ namespace libCanopenSimple
                 else
                 {
                     state = SDO_STATE.SDO_FINISHED;
-                    if (completedcallback != null)
-                    {
-                        can.InvokeSdoCallback(completedcallback, this);
-                    }
                 }
 
             }

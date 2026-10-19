@@ -31,7 +31,7 @@ internal static class ListenerRegressionTests
         public override void WriteLine(string value) { throw new InvalidOperationException("Trace unavailable"); }
     }
 
-    private sealed class FakeDriver
+    internal sealed class FakeDriver
     {
         internal readonly ConcurrentQueue<DriverInstance.Message> Incoming = new ConcurrentQueue<DriverInstance.Message>();
         internal readonly ManualResetEvent ReadEntered = new ManualResetEvent(false);
@@ -40,6 +40,8 @@ internal static class ListenerRegressionTests
         internal int ThrowNext;
         internal int StatusNext;
         internal int SendStatus;
+        internal readonly ConcurrentQueue<DriverInstance.Message> Outgoing = new ConcurrentQueue<DriverInstance.Message>();
+        internal Action<DriverInstance.Message> OnSend;
         internal int Reads;
         internal int Sends;
         internal int Closed;
@@ -67,6 +69,9 @@ internal static class ListenerRegressionTests
         private byte Send(IntPtr handle, IntPtr buffer)
         {
             Interlocked.Increment(ref Sends);
+            var message = (DriverInstance.Message)Marshal.PtrToStructure(buffer, typeof(DriverInstance.Message));
+            Outgoing.Enqueue(message);
+            OnSend?.Invoke(message);
             return (byte)Volatile.Read(ref SendStatus);
         }
 
@@ -440,6 +445,8 @@ internal static class ListenerRegressionTests
                 WatchdogReportsUnreportedExit();
                 Console.WriteLine("PASS: watchdog reports an exit that bypasses normal failure reporting");
                 ProtocolCallbacksAndMalformedPackets();
+                SdoRegressionTests.Run();
+                PdoConfigurationTests.Run();
                 Console.WriteLine("PASS: protocol validation, callbacks, SDO completion, watchdog and lifecycle");
                 CloseFromCallbackAndBurst();
                 Console.WriteLine("PASS: 5000-frame ordered burst and callback-initiated close");
