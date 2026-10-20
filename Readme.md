@@ -90,10 +90,18 @@ Currently the drivers in this source tree will not compile, it would be required
 
 ### Managed runtime targets
 
+The Visual Studio solution also has `Debug .NET 8` and `Release .NET 8` x64
+configurations. These select the modern target without command line flags, while
+the native drivers use ordinary Debug/Release x64. Existing Debug/Release choices
+retain their Framework compatibility. The shared runtime configuration props are
+imported by consumers in the CanMonitor tree so their libraries and plugins agree.
+
 The SDK-style library supports `net481` and `net8.0` from the same sources.
-Project references select the compatible target. Use `BuildNet481=true` or
-`BuildNet8=true` to build only one target (set the other flag false when switching
-an entire solution). Existing Framework outputs retain their paths; .NET 8
+Project references select the compatible target. Both targets remain available
+to restore and solution builds, so changing the Visual Studio configuration
+cannot invalidate the NuGet assets for the other runtime. For a single-target
+command line build, use `/p:TargetFramework=net481` or `/p:TargetFramework=net8.0`
+after restoring the project. Existing Framework outputs retain their paths; .NET 8
 outputs add a `net8.0` directory. Native CanFestival drivers keep the same ABI
 and v145 build settings; their architecture must match the consuming process.
 The validated modern native-driver deployment is Windows x64.
@@ -109,6 +117,11 @@ Use `-DotNet <path-to-dotnet.exe>` for a private runtime installation. Framework
 tests still support x64 and x86. The Framework-only Thread.Abort injection is
 skipped on modern .NET because that API is unsupported; exception, unexpected
 return, restart, cancellation and lifecycle regressions run on both runtimes.
+
+Run `./tests/test-framework-selection.ps1` to check an ordinary dual-target build
+without runtime-selection flags. It builds and runs independent Framework/.NET 8
+consumers in Debug and Release, ensuring one runtime's DLL cannot overwrite the
+other. The script also accepts `-DotNet` for a private .NET 8 runtime installation.
 
 ### PDO editor snapshots
 

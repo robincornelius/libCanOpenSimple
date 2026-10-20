@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\RuntimeConfigurations.props" Condition="'$(RuntimeConfigurationsImported)' != 'true'" />
   <PropertyGroup>
-    <TargetFramework>net481</TargetFramework>
+    <TargetFrameworks>net481;net8.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildNet8)' == 'true'">net8.0;net481</TargetFrameworks>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <EnableDefaultItems>false</EnableDefaultItems>
     <LangVersion>7.3</LangVersion>
@@ -10,7 +12,6 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateResourceUsePreserializedResources>true</GenerateResourceUsePreserializedResources>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-    <TargetFramework Condition="'$(BuildNet8)' == 'true'">net8.0</TargetFramework>
   </PropertyGroup>
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -18,7 +19,7 @@
     <Platform Condition="'$(Platform)' == ''">x64</Platform>
     <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
     <PlatformTarget>$(Platform)</PlatformTarget>
-    <OutputPath>build\tool\$(Platform)\$(Configuration)\</OutputPath>
+    <OutputPath>build\tool\$(Platform)\$(BaseBuildConfiguration)\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\*.cs" />
@@ -26,9 +27,9 @@
   </ItemGroup>
   <PropertyGroup>
     <IntermediateOutputPath>obj\$(SolutionName)\$(Platform)\$(Configuration)\$(TargetFramework)\</IntermediateOutputPath>
-    <OutputPath Condition="'$(BuildNet8)' == 'true'">$(OutputPath.TrimEnd('\'))\net8.0\</OutputPath>
+    <OutputPath Condition="'$(TargetFramework)' == 'net8.0'">$(OutputPath.TrimEnd('\'))\net8.0\</OutputPath>
   </PropertyGroup>
   <PropertyGroup>
-    <Prefer32Bit Condition="'$(BuildNet8)' != 'true' and '$(Platform)' == 'AnyCPU'">true</Prefer32Bit>
+    <Prefer32Bit Condition="'$(TargetFramework)' == 'net481' and '$(Platform)' == 'AnyCPU'">true</Prefer32Bit>
   </PropertyGroup>
 </Project>

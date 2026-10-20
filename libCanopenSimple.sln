@@ -1,9 +1,9 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27703.2018
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "libCanopenSimple", "libCanopenSimple.csproj", "{2FB81ADD-258F-4135-A9B9-17E2ACA2448E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "libCanopenSimple", "libCanopenSimple.csproj", "{2FB81ADD-258F-4135-A9B9-17E2ACA2448E}"
 	ProjectSection(ProjectDependencies) = postProject
 		{D8A23079-A479-4E0E-9777-32EEF436549D} = {D8A23079-A479-4E0E-9777-32EEF436549D}
 		{16C74D91-F858-4A70-9641-9228D80A24C0} = {16C74D91-F858-4A70-9641-9228D80A24C0}
@@ -30,8 +30,26 @@ Global
 		Release UNICODE|x86 = Release UNICODE|x86
 		Release|Any CPU = Release|Any CPU
 		Release|x86 = Release|x86
+		Debug .NET 8|x64 = Debug .NET 8|x64
+		Release .NET 8|x64 = Release .NET 8|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2FB81ADD-258F-4135-A9B9-17E2ACA2448E}.Release .NET 8|x64.ActiveCfg = Release .NET 8|x64
+		{2FB81ADD-258F-4135-A9B9-17E2ACA2448E}.Release .NET 8|x64.Build.0 = Release .NET 8|x64
+		{8B5C2DDC-C5EC-4776-8EEE-CAC2365987B8}.Release .NET 8|x64.ActiveCfg = Release|x64
+		{8B5C2DDC-C5EC-4776-8EEE-CAC2365987B8}.Release .NET 8|x64.Build.0 = Release|x64
+		{16C74D91-F858-4A70-9641-9228D80A24C0}.Release .NET 8|x64.ActiveCfg = Release|x64
+		{16C74D91-F858-4A70-9641-9228D80A24C0}.Release .NET 8|x64.Build.0 = Release|x64
+		{D8A23079-A479-4E0E-9777-32EEF436549D}.Release .NET 8|x64.ActiveCfg = Release|x64
+		{D8A23079-A479-4E0E-9777-32EEF436549D}.Release .NET 8|x64.Build.0 = Release|x64
+		{2FB81ADD-258F-4135-A9B9-17E2ACA2448E}.Debug .NET 8|x64.ActiveCfg = Debug .NET 8|x64
+		{2FB81ADD-258F-4135-A9B9-17E2ACA2448E}.Debug .NET 8|x64.Build.0 = Debug .NET 8|x64
+		{8B5C2DDC-C5EC-4776-8EEE-CAC2365987B8}.Debug .NET 8|x64.ActiveCfg = Debug|x64
+		{8B5C2DDC-C5EC-4776-8EEE-CAC2365987B8}.Debug .NET 8|x64.Build.0 = Debug|x64
+		{16C74D91-F858-4A70-9641-9228D80A24C0}.Debug .NET 8|x64.ActiveCfg = Debug|x64
+		{16C74D91-F858-4A70-9641-9228D80A24C0}.Debug .NET 8|x64.Build.0 = Debug|x64
+		{D8A23079-A479-4E0E-9777-32EEF436549D}.Debug .NET 8|x64.ActiveCfg = Debug|x64
+		{D8A23079-A479-4E0E-9777-32EEF436549D}.Debug .NET 8|x64.Build.0 = Debug|x64
 		{2FB81ADD-258F-4135-A9B9-17E2ACA2448E}.Release|x64.ActiveCfg = Release|x64
 		{2FB81ADD-258F-4135-A9B9-17E2ACA2448E}.Release|x64.Build.0 = Release|x64
 		{8B5C2DDC-C5EC-4776-8EEE-CAC2365987B8}.Release|x64.ActiveCfg = Release|x64

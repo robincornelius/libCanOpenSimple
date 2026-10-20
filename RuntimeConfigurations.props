@@ -1,0 +1,25 @@
+<Project>
+  <PropertyGroup>
+    <RuntimeConfigurationsImported>true</RuntimeConfigurationsImported>
+    <!-- Keep the actual configuration name for IDE/project-reference negotiation.
+         Use the base name only for compiler settings and established output paths. -->
+    <Configurations>Debug;Release;Debug .NET 8;Release .NET 8</Configurations>
+    <BaseBuildConfiguration>$(Configuration)</BaseBuildConfiguration>
+    <BaseBuildConfiguration Condition="'$(BaseBuildConfiguration)' == ''">Debug</BaseBuildConfiguration>
+    <BaseBuildConfiguration Condition="'$(Configuration)' == 'Debug .NET 8'">Debug</BaseBuildConfiguration>
+    <BaseBuildConfiguration Condition="'$(Configuration)' == 'Release .NET 8'">Release</BaseBuildConfiguration>
+    <IsNet8Configuration Condition="'$(Configuration)' == 'Debug .NET 8' or '$(Configuration)' == 'Release .NET 8'">true</IsNet8Configuration>
+    <BuildNet8 Condition="'$(IsNet8Configuration)' == 'true'">true</BuildNet8>
+    <BuildNet481 Condition="'$(IsNet8Configuration)' == 'true'">false</BuildNet481>
+  </PropertyGroup>
+  <!-- SDK projects also need the standard settings for named configurations,
+       including referenced upstream projects that do not have custom groups. -->
+  <PropertyGroup Condition="'$(IsNet8Configuration)' == 'true'">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>portable</DebugType>
+    <Optimize Condition="'$(BaseBuildConfiguration)' == 'Debug'">false</Optimize>
+    <Optimize Condition="'$(BaseBuildConfiguration)' == 'Release'">true</Optimize>
+    <DefineConstants Condition="'$(BaseBuildConfiguration)' == 'Debug'">$(DefineConstants);DEBUG;TRACE</DefineConstants>
+    <DefineConstants Condition="'$(BaseBuildConfiguration)' == 'Release'">$(DefineConstants);TRACE</DefineConstants>
+  </PropertyGroup>
+</Project>
