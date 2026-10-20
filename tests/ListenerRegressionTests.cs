@@ -216,6 +216,7 @@ internal static class ListenerRegressionTests
         Require(worker.IsStopped && starts == stopped, "Stopped supervisor restarted");
     }
 
+#if NETFRAMEWORK
     private static void WatchdogReportsUnreportedExit()
     {
         int starts = 0;
@@ -237,6 +238,8 @@ internal static class ListenerRegressionTests
         Interlocked.Exchange(ref run, 0);
         worker.Stop();
     }
+
+#endif
 
     private static void ProtocolCallbacksAndMalformedPackets()
     {
@@ -540,8 +543,13 @@ internal static class ListenerRegressionTests
                 Console.WriteLine("PASS: shutdown joins pending receive before native close");
                 SupervisorHandlesUnexpectedReturn();
                 Console.WriteLine("PASS: unexpected-return watchdog and broken logger isolation");
+#if NETFRAMEWORK
+                // Thread.Abort can terminate a Framework thread without reaching the normal failure path.
                 WatchdogReportsUnreportedExit();
                 Console.WriteLine("PASS: watchdog reports an exit that bypasses normal failure reporting");
+#else
+                Console.WriteLine("SKIP: Thread.Abort injection is unavailable on modern .NET; exception/return watchdog regressions still run");
+#endif
                 ProtocolCallbacksAndMalformedPackets();
                 SdoRegressionTests.Run();
                 PdoConfigurationTests.Run();

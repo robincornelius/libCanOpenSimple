@@ -2,9 +2,16 @@ param(
     [ValidateSet('x64', 'x86', 'All')]
     [string]$Platform = 'All',
     [ValidateSet('Debug', 'Release', 'All')]
-    [string]$Configuration = 'All'
+    [string]$Configuration = 'All',
+    [ValidateSet('net481', 'net8')]
+    [string]$Framework = 'net481',
+    [string]$DotNet = 'dotnet'
 )
 $ErrorActionPreference = 'Stop'
+if ($Framework -eq 'net8' -and $Platform -ne 'x64')
+{
+    throw 'Use -Platform x64 for the validated .NET 8 test configuration.'
+}
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
 $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
 if (-not $msbuild)
@@ -17,12 +24,20 @@ foreach ($architecture in $platforms)
 {
     foreach ($variant in $configurations)
     {
-        & $msbuild "$PSScriptRoot/ListenerRegressionTests.csproj" /t:Rebuild "/p:Platform=$architecture" "/p:Configuration=$variant" /nologo /v:minimal
+        $properties = if ($Framework -eq 'net8') { @('/p:BuildNet8=true', '/p:BuildNet481=false') } else { @('/p:BuildNet8=false', '/p:BuildNet481=true') }
+        & $msbuild "$PSScriptRoot/ListenerRegressionTests.csproj" /t:Restore,Rebuild "/p:Platform=$architecture" "/p:Configuration=$variant" @properties /nr:false /nologo /v:minimal
         if ($LASTEXITCODE -ne 0)
         {
             throw "Listener test build failed: $architecture $variant"
         }
-        & "$PSScriptRoot/build/$architecture/$variant/ListenerRegressionTests.exe"
+        if ($Framework -eq 'net8')
+        {
+            & $DotNet "$PSScriptRoot/build/$architecture/$variant/net8.0/ListenerRegressionTests.dll"
+        }
+        else
+        {
+            & "$PSScriptRoot/build/$architecture/$variant/ListenerRegressionTests.exe"
+        }
         if ($LASTEXITCODE -ne 0)
         {
             throw "Listener tests failed: $architecture $variant"

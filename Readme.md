@@ -88,6 +88,28 @@ Currently the drivers in this source tree will not compile, it would be required
 
 
 
+### Managed runtime targets
+
+The SDK-style library supports `net481` and `net8.0` from the same sources.
+Project references select the compatible target. Use `BuildNet481=true` or
+`BuildNet8=true` to build only one target (set the other flag false when switching
+an entire solution). Existing Framework outputs retain their paths; .NET 8
+outputs add a `net8.0` directory. Native CanFestival drivers keep the same ABI
+and v145 build settings; their architecture must match the consuming process.
+The validated modern native-driver deployment is Windows x64.
+
+The sample applications and test tools also accept `BuildNet8=true`. Run the
+listener/SDO/PDO regressions on an installed .NET 8 runtime with:
+
+```powershell
+./tests/run-tests.ps1 -Platform x64 -Framework net8
+```
+
+Use `-DotNet <path-to-dotnet.exe>` for a private runtime installation. Framework
+tests still support x64 and x86. The Framework-only Thread.Abort injection is
+skipped on modern .NET because that API is unsupported; exception, unexpected
+return, restart, cancellation and lifecycle regressions run on both runtimes.
+
 ### PDO editor snapshots
 
 `PdoConfiguration.ReadAsync` reads a selected PDO communication record and its active mapping under the node's exclusive SDO admission lease. Reading does not send NMT commands or change device settings. Unsupported optional communication fields and an absent mapping record are reported in the snapshot; a missing COB-ID or a transport failure stops the read. The PDO regression tests cover snapshot values, unsupported fields, absent mappings, and the absence of NMT commands during inspection.
