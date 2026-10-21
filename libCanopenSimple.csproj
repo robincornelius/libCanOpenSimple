@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <Import Project="RuntimeConfigurations.props" Condition="'$(RuntimeConfigurationsImported)' != 'true'" />
   <PropertyGroup>
-    <TargetFrameworks>net481;net8.0</TargetFrameworks>
-    <TargetFrameworks Condition="'$(BuildNet8)' == 'true'">net8.0;net481</TargetFrameworks>
+    <TargetFrameworks>net481;net48;net8.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildNet8)' == 'true'">net8.0;net481;net48</TargetFrameworks>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <EnableDefaultItems>false</EnableDefaultItems>
     <LangVersion>7.3</LangVersion>
@@ -98,8 +98,9 @@
   </PropertyGroup>
   <PropertyGroup>
     <IntermediateOutputPath>obj\$(SolutionName)\$(Platform)\$(Configuration)\$(TargetFramework)\</IntermediateOutputPath>
-    <!-- IDE and ordinary ProjectReference builds can build both targets without BuildNet8.
-         Choose the directory from the inner target so modern output cannot overwrite Framework. -->
+    <!-- IDE and ordinary ProjectReference builds can build all targets without BuildNet8.
+         Choose separate inner-target directories while preserving the net481 output path. -->
     <OutputPath Condition="'$(TargetFramework)' == 'net8.0'">$(OutputPath.TrimEnd('\'))\net8.0\</OutputPath>
+    <OutputPath Condition="'$(TargetFramework)' == 'net48'">$(OutputPath.TrimEnd('\'))\net48\</OutputPath>
   </PropertyGroup>
 </Project>

@@ -15,13 +15,13 @@ New-Item $folder -ItemType Directory -Force | Out-Null
 
 foreach ($configuration in @('Debug', 'Release'))
 {
-    # Match an IDE build: both targets, without the solution helper's selection flags.
+    # Match an IDE build: all targets, without the solution helper's selection flags.
     & $msbuild $library /t:Restore,Rebuild /p:Platform=x64 "/p:Configuration=$configuration" /p:ImportDirectoryBuildProps=false /nr:false /nologo /v:quiet
     if ($LASTEXITCODE -ne 0)
     {
-        throw "Dual-target library build failed: $configuration"
+        throw "Multi-target library build failed: $configuration"
     }
-    foreach ($framework in @('net481', 'net8.0'))
+    foreach ($framework in @('net48', 'net481', 'net8.0'))
     {
         $consumer = Join-Path $folder "$configuration/$framework"
         New-Item $consumer -ItemType Directory -Force | Out-Null
@@ -49,7 +49,9 @@ internal static class Program
         var can = new libCanopenSimple.libCanopenSimple();
         string actual = can.GetType().Assembly.GetCustomAttribute<TargetFrameworkAttribute>().FrameworkName;
         can.close();
-#if NETFRAMEWORK
+#if NET48
+        const string expected = ".NETFramework,Version=v4.8";
+#elif NETFRAMEWORK
         const string expected = ".NETFramework,Version=v4.8.1";
 #else
         const string expected = ".NETCoreApp,Version=v8.0";
@@ -63,10 +65,10 @@ internal static class Program
         & $msbuild "$consumer/Consumer.csproj" /t:Restore,Build /p:BuildProjectReferences=false /p:Platform=x64 "/p:Configuration=$configuration" /p:ImportDirectoryBuildProps=false /nr:false /nologo /v:minimal
         if ($LASTEXITCODE -ne 0)
         {
-            throw "Consumer failed after dual-target build: $framework $configuration"
+            throw "Consumer failed after multi-target build: $framework $configuration"
         }
         $output = "$consumer/bin/x64/$configuration/$framework/Consumer"
-        if ($framework -eq 'net481')
+        if ($framework -ne 'net8.0')
         {
             & "$output.exe"
         }
@@ -80,4 +82,4 @@ internal static class Program
         }
     }
 }
-Write-Host 'PASS: unfiltered dual-target builds preserve independent Framework/.NET 8 outputs and consumer references in Debug/Release'
+Write-Host 'PASS: unfiltered multi-target builds preserve independent .NET 4.8/4.8.1/8 outputs and consumer references in Debug/Release'

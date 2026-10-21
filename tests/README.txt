@@ -1,7 +1,9 @@
 Listener reliability regression tests
 
 Run ./run-tests.ps1 in PowerShell. Prerequisites: MSBuild and the .NET Framework
-4.8 targeting pack. Defaults: x64 and x86, Debug and Release. Select individual
+4.8.1 targeting pack (4.8 for -Framework net48). Defaults: x64 and x86,
+Debug and Release, .NET 4.8.1. Use -Framework net48 for .NET 4.8 compatibility.
+Select individual
 variants with -Platform x64 or x86 and -Configuration Debug or Release.
 
 The test project compiles the production C# source files directly, allowing

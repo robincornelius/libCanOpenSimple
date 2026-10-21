@@ -96,13 +96,14 @@ the native drivers use ordinary Debug/Release x64. Existing Debug/Release choice
 retain their Framework compatibility. The shared runtime configuration props are
 imported by consumers in the CanMonitor tree so their libraries and plugins agree.
 
-The SDK-style library supports `net481` and `net8.0` from the same sources.
-Project references select the compatible target. Both targets remain available
+The SDK-style library supports `net48`, `net481` and `net8.0` from the same sources.
+Project references select the compatible target. All targets remain available
 to restore and solution builds, so changing the Visual Studio configuration
 cannot invalidate the NuGet assets for the other runtime. For a single-target
-command line build, use `/p:TargetFramework=net481` or `/p:TargetFramework=net8.0`
-after restoring the project. Existing Framework outputs retain their paths; .NET 8
-outputs add a `net8.0` directory. Native CanFestival drivers keep the same ABI
+command line build, use `/p:TargetFramework=net48`, `/p:TargetFramework=net481`
+or `/p:TargetFramework=net8.0` after restoring the project. Existing .NET 4.8.1
+outputs retain their paths; .NET 4.8 and .NET 8 outputs add a `net48` or `net8.0`
+directory respectively. Native CanFestival drivers keep the same ABI
 and v145 build settings; their architecture must match the consuming process.
 The validated modern native-driver deployment is Windows x64.
 
@@ -118,8 +119,12 @@ tests still support x64 and x86. The Framework-only Thread.Abort injection is
 skipped on modern .NET because that API is unsupported; exception, unexpected
 return, restart, cancellation and lifecycle regressions run on both runtimes.
 
-Run `./tests/test-framework-selection.ps1` to check an ordinary dual-target build
-without runtime-selection flags. It builds and runs independent Framework/.NET 8
+For .NET Framework 4.8 consumers, run `./tests/run-tests.ps1 -Framework net48`.
+This retains the .NET 4.8.1 default and exercises the same listener/SDO/PDO suite
+against .NET 4.8 reference assemblies without requiring consumers to retarget.
+
+Run `./tests/test-framework-selection.ps1` to check an ordinary multi-target build
+without runtime-selection flags. It builds and runs independent .NET 4.8/4.8.1/8
 consumers in Debug and Release, ensuring one runtime's DLL cannot overwrite the
 other. The script also accepts `-DotNet` for a private .NET 8 runtime installation.
 

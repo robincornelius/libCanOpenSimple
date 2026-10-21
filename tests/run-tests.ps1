@@ -3,7 +3,7 @@ param(
     [string]$Platform = 'All',
     [ValidateSet('Debug', 'Release', 'All')]
     [string]$Configuration = 'All',
-    [ValidateSet('net481', 'net8')]
+    [ValidateSet('net48', 'net481', 'net8')]
     [string]$Framework = 'net481',
     [string]$DotNet = 'dotnet'
 )
@@ -25,6 +25,8 @@ foreach ($architecture in $platforms)
     foreach ($variant in $configurations)
     {
         $properties = if ($Framework -eq 'net8') { @('/p:BuildNet8=true', '/p:BuildNet481=false') } else { @('/p:BuildNet8=false', '/p:BuildNet481=true') }
+        $targetFramework = if ($Framework -eq 'net8') { 'net8.0' } else { $Framework }
+        $properties += "/p:TargetFramework=$targetFramework"
         & $msbuild "$PSScriptRoot/ListenerRegressionTests.csproj" /t:Restore,Rebuild "/p:Platform=$architecture" "/p:Configuration=$variant" @properties /nr:false /nologo /v:minimal
         if ($LASTEXITCODE -ne 0)
         {
@@ -36,7 +38,8 @@ foreach ($architecture in $platforms)
         }
         else
         {
-            & "$PSScriptRoot/build/$architecture/$variant/ListenerRegressionTests.exe"
+            $frameworkDirectory = if ($Framework -eq 'net48') { 'net48/' } else { '' }
+            & "$PSScriptRoot/build/$architecture/$variant/${frameworkDirectory}ListenerRegressionTests.exe"
         }
         if ($LASTEXITCODE -ne 0)
         {
