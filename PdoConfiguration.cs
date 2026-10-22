@@ -210,13 +210,13 @@ namespace libCanopenSimple
                 // Disable using the device's current identifier first. Only then
                 // change the identifier/flags requested by the caller.
                 uint original = ReadU32(io, group.Communication, 1);
-                CheckedWrite(io, group.Communication, 1, BitConverter.GetBytes(original | Invalid));
+                CheckedWrite(io, group.Communication, 1, BitConverter.GetBytes(original | Invalid), "Disable PDO");
             }
             foreach (var group in groups)
             {
                 if (group.Remap)
                 {
-                    CheckedWrite(io, group.Mapping, 0, new byte[] { 0 });
+                    CheckedWrite(io, group.Mapping, 0, new byte[] { 0 }, "Clear PDO mapping");
                 }
                 foreach (var write in group.Writes.OrderBy(write => write.Index).ThenBy(write => write.Subindex))
                 {
@@ -226,22 +226,22 @@ namespace libCanopenSimple
                     }
                     byte[] data = write.Index == group.Communication && write.Subindex == 1
                         ? BitConverter.GetBytes(group.FinalCob | Invalid) : write.Data;
-                    CheckedWrite(io, write.Index, write.Subindex, data);
+                    CheckedWrite(io, write.Index, write.Subindex, data, "Write PDO parameter");
                 }
                 if (group.Remap)
                 {
-                    CheckedWrite(io, group.Mapping, 0, new byte[] { group.FinalCount });
+                    CheckedWrite(io, group.Mapping, 0, new byte[] { group.FinalCount }, "Set PDO mapping count");
                 }
             }
             foreach (var write in writes.Where(write => !IsPdoParameter(write.Index)))
             {
-                CheckedWrite(io, write.Index, write.Subindex, write.Data);
+                CheckedWrite(io, write.Index, write.Subindex, write.Data, "Write configuration parameter");
             }
             // Enable only after all groups and other batch entries succeeded.
             // Preserve an intentionally disabled PDO and every other COB-ID bit.
             foreach (var group in groups)
             {
-                CheckedWrite(io, group.Communication, 1, BitConverter.GetBytes(group.FinalCob));
+                CheckedWrite(io, group.Communication, 1, BitConverter.GetBytes(group.FinalCob), "Restore PDO COB-ID");
             }
             if (groups.Length != 0)
             {
@@ -249,13 +249,24 @@ namespace libCanopenSimple
             }
         }
 
-        private static void CheckedWrite(IPdoConfigurationIo io, ushort index, byte subindex, byte[] data)
+        private static void CheckedWrite(IPdoConfigurationIo io, ushort index, byte subindex, byte[] data, string operation)
         {
-            io.Write(index, subindex, data);
-            byte[] actual = io.Read(index, subindex);
-            if (!data.SequenceEqual(actual))
+            try
             {
-                throw new InvalidOperationException(string.Format("Read-back mismatch at {0:X4}:{1:X2}. Configuration stopped; inspect the PDO/NMT state before resuming.", index, subindex));
+                io.Write(index, subindex, data);
+                byte[] actual = io.Read(index, subindex);
+                if (!data.SequenceEqual(actual))
+                {
+                    throw new InvalidOperationException("Read-back mismatch. Configuration stopped; inspect the PDO/NMT state before resuming.");
+                }
+            }
+            catch (Exception error)
+            {
+                string value = data.Length <= 8
+                    ? "0x" + BitConverter.ToString(data.Reverse().ToArray()).Replace("-", "")
+                    : BitConverter.ToString(data);
+                throw new InvalidOperationException(string.Format("{0} {1:X4}:{2:X2}, value {3} failed: {4}",
+                    operation, index, subindex, value, error.Message), error);
             }
         }
 

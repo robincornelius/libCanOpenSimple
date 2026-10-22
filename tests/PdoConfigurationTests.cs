@@ -21,6 +21,8 @@ internal static class PdoConfigurationTests
         internal readonly Dictionary<int, byte[]> Values = new Dictionary<int, byte[]>();
         internal readonly List<string> Operations = new List<string>();
         internal int FailIndex = -1;
+        internal int FailWriteNumber;
+        private int writeNumber;
         internal bool Mismatch;
         internal bool Written;
 
@@ -51,7 +53,7 @@ internal static class PdoConfigurationTests
         public void Write(ushort index, byte subindex, byte[] data)
         {
             Operations.Add(string.Format("{0:X4}:{1:X2}={2}", index, subindex, BitConverter.ToString(data)));
-            if (index == FailIndex)
+            if (++writeNumber == FailWriteNumber || index == FailIndex)
             {
                 throw new InvalidOperationException("Injected SDO abort");
             }
@@ -129,9 +131,36 @@ internal static class PdoConfigurationTests
             failed = true;
         }
         Require(failed && device.Operations.SequenceEqual(new[] { "PREOP" }), "Invalid mapping was written or enabled");
+        WriteFailureDetails();
         ExclusiveAdmission();
         ProtocolHandshake();
         Console.WriteLine("PASS: PDO inhibit/remapping handshake, flags, counts, verification, abort and exclusive SDO admission");
+    }
+
+    private static void WriteFailureDetails()
+    {
+        string[] stages = { "Disable PDO", "Write PDO parameter", "Restore PDO COB-ID" };
+        string[] values = { "0x80000201", "0x80000281", "0x00000281" };
+        for (int stage = 0; stage < stages.Length; stage++)
+        {
+            var device = new Device { FailWriteNumber = stage + 1 };
+            device.Set(0x1400, 1, BitConverter.GetBytes(0x201U));
+            InvalidOperationException failure = null;
+            try
+            {
+                PdoConfiguration.Apply(device, new[] { new SdoParameterWrite(0x1400, 1, BitConverter.GetBytes(0x281U)) });
+            }
+            catch (InvalidOperationException error)
+            {
+                failure = error;
+            }
+            Require(failure != null && failure.Message.Contains(stages[stage])
+                && failure.Message.Contains("1400:01") && failure.Message.Contains(values[stage])
+                && failure.InnerException != null && failure.Message.Contains("Injected SDO abort"),
+                "PDO failure did not identify its stage, exact value and original error");
+            Require(!device.Operations.Contains("OPERATIONAL"), "Failed PDO write resumed the node");
+        }
+        Console.WriteLine("PASS: RPDO disable, parameter and restore failures identify their stage and exact value");
     }
 
     private static void ExclusiveAdmission()
